@@ -20,6 +20,9 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using System.Windows.Interop;
+using System.Media;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using Path = System.IO.Path;
 using SystemPath = System.Windows.Shapes.Path;
@@ -120,13 +123,215 @@ namespace BeamDropWindows
         }
     }
 
+
+    public class BeamDropSettings
+    {
+        public string DownloadDir { get; set; }
+        public string DeviceName { get; set; }
+        public bool IsDarkMode { get; set; }
+        public bool RunOnStartup { get; set; }
+        public bool MinimizeToTray { get; set; }
+        public bool SoundChimeOnComplete { get; set; }
+        public bool AutoAcceptFiles { get; set; }
+        public bool TurboSpeedMode { get; set; }
+        public bool AnimationsEnabled { get; set; }
+        public bool AutoFinishEnabled { get; set; }
+
+        public BeamDropSettings()
+        {
+            DownloadDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "BeamDrop");
+            DeviceName = Environment.MachineName;
+            IsDarkMode = true;
+            RunOnStartup = false;
+            MinimizeToTray = true;
+            SoundChimeOnComplete = true;
+            AutoAcceptFiles = true;
+            TurboSpeedMode = true;
+            AnimationsEnabled = true;
+            AutoFinishEnabled = true;
+        }
+
+        private static string GetConfigPath()
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string dir = Path.Combine(appData, "BeamDrop");
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "settings.json");
+        }
+
+        public static BeamDropSettings Load()
+        {
+            var s = new BeamDropSettings();
+            try
+            {
+                string path = GetConfigPath();
+                if (File.Exists(path))
+                {
+                    string json = File.ReadAllText(path, Encoding.UTF8);
+                    s.DownloadDir = ExtractJsonString(json, "DownloadDir", s.DownloadDir);
+                    s.DeviceName = ExtractJsonString(json, "DeviceName", s.DeviceName);
+                    s.IsDarkMode = ExtractJsonBool(json, "IsDarkMode", s.IsDarkMode);
+                    s.RunOnStartup = ExtractJsonBool(json, "RunOnStartup", s.RunOnStartup);
+                    s.MinimizeToTray = ExtractJsonBool(json, "MinimizeToTray", s.MinimizeToTray);
+                    s.SoundChimeOnComplete = ExtractJsonBool(json, "SoundChimeOnComplete", s.SoundChimeOnComplete);
+                    s.AutoAcceptFiles = ExtractJsonBool(json, "AutoAcceptFiles", s.AutoAcceptFiles);
+                    s.TurboSpeedMode = ExtractJsonBool(json, "TurboSpeedMode", s.TurboSpeedMode);
+                    s.AnimationsEnabled = ExtractJsonBool(json, "AnimationsEnabled", s.AnimationsEnabled);
+                    s.AutoFinishEnabled = ExtractJsonBool(json, "AutoFinishEnabled", s.AutoFinishEnabled);
+                }
+            }
+            catch { }
+            return s;
+        }
+
+        public void Save()
+        {
+            try
+            {
+                string path = GetConfigPath();
+                var sb = new StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine(string.Format("  \"DownloadDir\": \"{0}\",", EscapeJson(DownloadDir)));
+                sb.AppendLine(string.Format("  \"DeviceName\": \"{0}\",", EscapeJson(DeviceName)));
+                sb.AppendLine(string.Format("  \"IsDarkMode\": {0},", IsDarkMode.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"RunOnStartup\": {0},", RunOnStartup.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"MinimizeToTray\": {0},", MinimizeToTray.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"SoundChimeOnComplete\": {0},", SoundChimeOnComplete.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"AutoAcceptFiles\": {0},", AutoAcceptFiles.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"TurboSpeedMode\": {0},", TurboSpeedMode.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"AnimationsEnabled\": {0},", AnimationsEnabled.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"AutoFinishEnabled\": {0}", AutoFinishEnabled.ToString().ToLowerInvariant()));
+                sb.AppendLine("}");
+                File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        private static string EscapeJson(string val)
+        {
+            if (val == null) return "";
+            return val.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+
+        private static string ExtractJsonString(string json, string key, string fallback)
+        {
+            string pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"";
+            var m = Regex.Match(json, pattern);
+            return m.Success ? m.Groups[1].Value.Replace("\\\\", "\\") : fallback;
+        }
+
+        private static bool ExtractJsonBool(string json, string key, bool fallback)
+        {
+            string pattern = "\"" + key + "\"\\s*:\\s*(true|false)";
+            var m = Regex.Match(json, pattern, RegexOptions.IgnoreCase);
+            return m.Success ? bool.Parse(m.Groups[1].Value) : fallback;
+        }
+    }
+
+    public class PromptInputDialog : Window
+    {
+        public string InputText { get; private set; }
+
+        public PromptInputDialog(string title, string prompt, string initialValue, bool isDark)
+        {
+            Title = title;
+            Width = 430;
+            Height = 220;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            ResizeMode = ResizeMode.NoResize;
+            WindowStyle = WindowStyle.ToolWindow;
+
+            Color bg = isDark ? Color.FromRgb(11, 21, 18) : Color.FromRgb(245, 249, 247);
+            Color textCol = isDark ? Color.FromRgb(236, 253, 245) : Color.FromRgb(15, 41, 34);
+            Color boxBg = isDark ? Color.FromRgb(28, 49, 44) : Colors.White;
+            Color boxBorder = isDark ? Color.FromRgb(42, 71, 64) : Color.FromRgb(208, 227, 220);
+
+            Background = new SolidColorBrush(bg);
+            Foreground = new SolidColorBrush(textCol);
+            FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
+
+            var stack = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+
+            var label = new TextBlock
+            {
+                Text = prompt,
+                FontSize = 13.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(textCol),
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            stack.Children.Add(label);
+
+            var box = new TextBox
+            {
+                Text = initialValue,
+                FontSize = 14,
+                Padding = new Thickness(10, 8, 10, 8),
+                Background = new SolidColorBrush(boxBg),
+                Foreground = new SolidColorBrush(textCol),
+                BorderBrush = new SolidColorBrush(boxBorder),
+                BorderThickness = new Thickness(1.5),
+                Margin = new Thickness(0, 0, 0, 18)
+            };
+            stack.Children.Add(box);
+
+            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+
+            var cancelBtn = new Button
+            {
+                Content = "Cancel",
+                Width = 85,
+                Height = 32,
+                Margin = new Thickness(0, 0, 10, 0),
+                Background = new SolidColorBrush(isDark ? Color.FromRgb(28, 49, 44) : Color.FromRgb(230, 235, 232)),
+                Foreground = new SolidColorBrush(textCol),
+                BorderThickness = new Thickness(0)
+            };
+            cancelBtn.Click += (s, e) => { DialogResult = false; Close(); };
+            btnRow.Children.Add(cancelBtn);
+
+            var okBtn = new Button
+            {
+                Content = "Save",
+                Width = 85,
+                Height = 32,
+                Background = new SolidColorBrush(Color.FromRgb(94, 212, 187)),
+                Foreground = new SolidColorBrush(Color.FromRgb(15, 23, 42)),
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(0)
+            };
+            okBtn.Click += (s, e) =>
+            {
+                InputText = box.Text.Trim();
+                DialogResult = true;
+                Close();
+            };
+            btnRow.Children.Add(okBtn);
+
+            stack.Children.Add(btnRow);
+            Content = stack;
+
+            Loaded += (s, e) => { box.Focus(); box.SelectAll(); };
+        }
+    }
+
     public class MainWindow : Window
     {
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        private const int DWMWA_CAPTION_COLOR = 35;
+        private const int DWMWA_TEXT_COLOR = 36;
+
         private const int TCP_PORT = 8988;
         private const int UDP_PORT = 8989;
         private const string MDNS_GROUP = "224.0.0.251";
         private const int MDNS_PORT = 5353;
 
+        private BeamDropSettings _settings;
+        private bool _isDarkMode = true;
         private string _deviceName = Environment.MachineName;
         private string _localIp = "127.0.0.1";
         private string _deviceId;
@@ -139,14 +344,23 @@ namespace BeamDropWindows
 
         private CancellationTokenSource _cts = new CancellationTokenSource();
         private CancellationTokenSource _activeTransferCts;
+        private DispatcherTimer _peerPruneTimer;
+        private System.Windows.Forms.NotifyIcon _trayIcon;
 
-        // Settings state
+        // Settings & Navigation state
         private int _currentTab = 0; // 0 = Receive, 1 = Send, 2 = Settings
         private int _quickSaveMode = 2; // 0 = Off, 1 = Favorites, 2 = On
         private bool _animationsEnabled = true;
         private bool _autoFinishEnabled = true;
 
-        // Top-level Views
+        // Top-level layout & Views
+        private Grid _rootGrid;
+        private Border _sidebar;
+        private StackPanel _sideStack;
+        private Grid _contentHost;
+        private TextBlock _brandText;
+        private TextBlock _authorInfoText;
+
         private Grid _receiveView;
         private ScrollViewer _sendView;
         private ScrollViewer _settingsView;
@@ -167,6 +381,9 @@ namespace BeamDropWindows
         private TextBlock _stagedSummaryText;
         private StackPanel _stagedListPanel;
         private StackPanel _peersListPanel;
+        private Border _scanButton;
+        private TextBlock _scanButtonText;
+        private bool _isScanning = false;
 
         // Discreet, Self-Dismissing Progress Indicator + Non-Blocking Fluid Aurora Stream
         private Grid _discreetTransferLayer;
@@ -197,21 +414,276 @@ namespace BeamDropWindows
 
         // Colors matching LocalSend & BeamDrop Fluid Aurora palette
         private static readonly Color BgDark = Color.FromRgb(11, 21, 18);        // #0B1512
-        private static readonly Color SidebarBg = Color.FromRgb(8, 16, 14);      // #08100E
-        private static readonly Color CardSurface = Color.FromRgb(28, 49, 44);   // #1C312C
-        private static readonly Color CardBorder = Color.FromRgb(42, 71, 64);    // #2A4740
+        private static readonly Color SidebarBgDark = Color.FromRgb(8, 16, 14);  // #08100E
+        private static readonly Color CardSurfaceDark = Color.FromRgb(28, 49, 44);   // #1C312C
+        private static readonly Color CardBorderDark = Color.FromRgb(42, 71, 64);    // #2A4740
+        private static readonly Color TextPrimaryDark = Color.FromRgb(236, 253, 245);
+        private static readonly Color TextSecondaryDark = Color.FromRgb(148, 179, 170);
+
+        // Light Theme Palette
+        private static readonly Color BgLight = Color.FromRgb(245, 249, 247);      // #F5F9F7
+        private static readonly Color SidebarBgLight = Color.FromRgb(232, 241, 237); // #E8F1ED
+        private static readonly Color CardSurfaceLight = Colors.White;               // #FFFFFF
+        private static readonly Color CardBorderLight = Color.FromRgb(208, 227, 220);// #D0E3DC
+        private static readonly Color TextPrimaryLight = Color.FromRgb(15, 41, 34);  // #0F2922
+        private static readonly Color TextSecondaryLight = Color.FromRgb(77, 119, 108);
+
+        // Universal Accents
         private static readonly Color MintAccent = Color.FromRgb(94, 212, 187);  // #5ED4BB
         private static readonly Color ElectricCyan = Color.FromRgb(0, 245, 212); // #00F5D4
         private static readonly Color CyanGlow = Color.FromRgb(56, 189, 248);    // #38BDF8
         private static readonly Color RadiantPurple = Color.FromRgb(157, 78, 221);// #9D4EDD
         private static readonly Color SolarAmber = Color.FromRgb(255, 183, 3);   // #FFB703
-        private static readonly Color TextPrimary = Color.FromRgb(236, 253, 245);
-        private static readonly Color TextSecondary = Color.FromRgb(148, 179, 170);
 
+        // Dynamic Active Theme Colors
+        private Color _currentBg;
+        private Color _currentSidebarBg;
+        private Color _currentCardSurface;
+        private Color _currentCardBorder;
+        private Color _currentTextPrimary;
+        private Color _currentTextSecondary;
+        private Color _currentMintAccent;
+
+        // Dynamic Theme Color Accessors
+        private Color CardSurface { get { return _currentCardSurface; } }
+        private Color CardBorder { get { return _currentCardBorder; } }
+        private Color TextPrimary { get { return _currentTextPrimary; } }
+        private Color TextSecondary { get { return _currentTextSecondary; } }
+
+        private void SetThemeColors(bool dark)
+        {
+            _isDarkMode = dark;
+            if (dark)
+            {
+                _currentBg = BgDark;
+                _currentSidebarBg = SidebarBgDark;
+                _currentCardSurface = CardSurfaceDark;
+                _currentCardBorder = CardBorderDark;
+                _currentTextPrimary = TextPrimaryDark;
+                _currentTextSecondary = TextSecondaryDark;
+                _currentMintAccent = MintAccent;
+            }
+            else
+            {
+                _currentBg = BgLight;
+                _currentSidebarBg = SidebarBgLight;
+                _currentCardSurface = CardSurfaceLight;
+                _currentCardBorder = CardBorderLight;
+                _currentTextPrimary = TextPrimaryLight;
+                _currentTextSecondary = TextSecondaryLight;
+                _currentMintAccent = Color.FromRgb(13, 148, 136); // #0D9488 high contrast on light
+            }
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            ApplyTitleBarTheme(_isDarkMode);
+        }
+
+        private void ApplyTitleBarTheme(bool dark)
+        {
+            try
+            {
+                var helper = new WindowInteropHelper(this);
+                IntPtr hwnd = helper.Handle;
+                if (hwnd == IntPtr.Zero) return;
+
+                int useDark = dark ? 1 : 0;
+                if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int)) != 0)
+                {
+                    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useDark, sizeof(int));
+                }
+
+                // Windows 11 custom caption color:
+                // 0x00BBGGRR format
+                // Dark: #0B1512 -> 0x0012150B
+                // Light: #F5F9F7 -> 0x00F7F9F5
+                int captionColor = dark ? 0x0012150B : 0x00F7F9F5;
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+
+                int textColor = dark ? 0x00F5FDEC : 0x0022290F;
+                DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref textColor, sizeof(int));
+            }
+            catch { }
+        }
+
+        private void ApplyTheme(bool dark)
+        {
+            SetThemeColors(dark);
+            _settings.IsDarkMode = dark;
+            _settings.Save();
+
+            Background = new SolidColorBrush(_currentBg);
+            Foreground = new SolidColorBrush(_currentTextPrimary);
+
+            if (_sidebar != null)
+            {
+                _sidebar.Background = new SolidColorBrush(_currentSidebarBg);
+                _sidebar.BorderBrush = new SolidColorBrush(Color.FromArgb(40, _currentMintAccent.R, _currentMintAccent.G, _currentMintAccent.B));
+            }
+            if (_brandText != null)
+            {
+                _brandText.Foreground = new SolidColorBrush(_currentTextPrimary);
+            }
+            if (_authorInfoText != null)
+            {
+                _authorInfoText.Foreground = new SolidColorBrush(_currentTextSecondary);
+            }
+
+            ApplyTitleBarTheme(dark);
+            RebuildViews();
+        }
+
+        private void RebuildViews()
+        {
+            if (_contentHost == null) return;
+            _contentHost.Children.Clear();
+            _receiveView = BuildReceiveView();
+            _sendView = BuildSendView();
+            _settingsView = BuildSettingsView();
+            _discreetTransferLayer = BuildDiscreetTransferProgressIndicator();
+            _completionToastCard = BuildCompletionToast();
+
+            _contentHost.Children.Add(_receiveView);
+            _contentHost.Children.Add(_sendView);
+            _contentHost.Children.Add(_settingsView);
+            _contentHost.Children.Add(_discreetTransferLayer);
+            _contentHost.Children.Add(_completionToastCard);
+
+            SwitchTab(_currentTab);
+            RefreshPeersListUi();
+        }
+
+        private void SetupSystemTray()
+        {
+            try
+            {
+                _trayIcon = new System.Windows.Forms.NotifyIcon();
+                string icoFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BeamDrop.ico");
+                if (File.Exists(icoFile))
+                {
+                    _trayIcon.Icon = new System.Drawing.Icon(icoFile);
+                }
+                else
+                {
+                    _trayIcon.Icon = System.Drawing.SystemIcons.Application;
+                }
+                _trayIcon.Text = "BeamDrop Continuity (Sajjad Hossain)";
+                _trayIcon.Visible = _settings.MinimizeToTray;
+                _trayIcon.DoubleClick += (s, e) =>
+                {
+                    Show();
+                    WindowState = WindowState.Normal;
+                    Activate();
+                };
+
+                var menu = new System.Windows.Forms.ContextMenu();
+                menu.MenuItems.Add("Open BeamDrop", (s, e) => { Show(); WindowState = WindowState.Normal; Activate(); });
+                menu.MenuItems.Add("Open Downloads Folder", (s, e) => { if (Directory.Exists(_downloadDir)) Process.Start("explorer.exe", _downloadDir); });
+                menu.MenuItems.Add("-");
+                menu.MenuItems.Add("Exit BeamDrop", (s, e) => { if (_trayIcon != null) _trayIcon.Visible = false; Application.Current.Shutdown(); });
+                _trayIcon.ContextMenu = menu;
+            }
+            catch { }
+        }
+
+        protected override void OnStateChanged(EventArgs e)
+        {
+            base.OnStateChanged(e);
+            if (WindowState == WindowState.Minimized && _settings != null && _settings.MinimizeToTray)
+            {
+                Hide();
+                if (_trayIcon != null)
+                {
+                    _trayIcon.Visible = true;
+                    _trayIcon.ShowBalloonTip(2000, "BeamDrop is active", "Listening for incoming files in the background.", System.Windows.Forms.ToolTipIcon.Info);
+                }
+            }
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (_trayIcon != null)
+            {
+                _trayIcon.Visible = false;
+                _trayIcon.Dispose();
+            }
+            base.OnClosing(e);
+        }
+
+        private static void SetRunOnStartup(bool enable)
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (key != null)
+                    {
+                        string exePath = Process.GetCurrentProcess().MainModule.FileName;
+                        if (enable)
+                        {
+                            key.SetValue("BeamDrop", "\"" + exePath + "\"");
+                        }
+                        else
+                        {
+                            key.DeleteValue("BeamDrop", false);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void PlayCompletionChime()
+        {
+            try
+            {
+                if (_settings != null && _settings.SoundChimeOnComplete)
+                {
+                    SystemSounds.Asterisk.Play();
+                }
+            }
+            catch { }
+        }
+
+        private void PruneStalePeers()
+        {
+            var now = DateTime.UtcNow;
+            var staleKeys = new List<string>();
+
+            foreach (var kvp in _peers)
+            {
+                var peer = kvp.Value;
+                // If peer has not broadcast a beacon or packet in the last 10 seconds, it left Wi-Fi
+                if ((now - peer.LastSeen).TotalSeconds > 10.0)
+                {
+                    staleKeys.Add(kvp.Key);
+                }
+            }
+
+            if (staleKeys.Count > 0)
+            {
+                foreach (var key in staleKeys)
+                {
+                    PeerNode removed;
+                    _peers.TryRemove(key, out removed);
+                }
+                RefreshPeersListUi();
+            }
+        }
         public MainWindow()
         {
-            _downloadDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "BeamDrop");
-            Directory.CreateDirectory(_downloadDir);
+            _settings = BeamDropSettings.Load();
+            _downloadDir = _settings.DownloadDir;
+            if (!Directory.Exists(_downloadDir)) Directory.CreateDirectory(_downloadDir);
+            _deviceName = !string.IsNullOrEmpty(_settings.DeviceName) ? _settings.DeviceName : Environment.MachineName;
+            _isDarkMode = _settings.IsDarkMode;
+            _animationsEnabled = _settings.AnimationsEnabled;
+            _autoFinishEnabled = _settings.AutoFinishEnabled;
+
+            SetThemeColors(_isDarkMode);
+
             _localIp = ResolveBestLocalIp();
             _deviceId = "win_" + Math.Abs((_deviceName + "_" + _localIp).GetHashCode() % 1000000);
 
@@ -225,13 +697,14 @@ namespace BeamDropWindows
                 }
             }
             catch {}
+
             Width = 1040;
             Height = 680;
             MinWidth = 820;
             MinHeight = 560;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Background = new SolidColorBrush(BgDark);
-            Foreground = new SolidColorBrush(TextPrimary);
+            Background = new SolidColorBrush(_currentBg);
+            Foreground = new SolidColorBrush(_currentTextPrimary);
             FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
             AllowDrop = true;
             Drop += OnWindowFileDrop;
@@ -239,26 +712,32 @@ namespace BeamDropWindows
             BuildUserInterface();
             SwitchTab(0);
 
+            SetupSystemTray();
+
+            _peerPruneTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+            _peerPruneTimer.Tick += (s, e) => PruneStalePeers();
+            _peerPruneTimer.Start();
+
             CompositionTarget.Rendering += OnRenderFrame;
             StartNetworkEngines();
         }
 
         private void BuildUserInterface()
         {
-            var rootGrid = new Grid();
-            rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
-            rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            _rootGrid = new Grid();
+            _rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+            _rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             // 1. Left Navigation Sidebar (Receive | Send | Settings)
-            var sidebar = new Border
+            _sidebar = new Border
             {
-                Background = new SolidColorBrush(SidebarBg),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(40, 94, 212, 187)),
+                Background = new SolidColorBrush(_currentSidebarBg),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(40, _currentMintAccent.R, _currentMintAccent.G, _currentMintAccent.B)),
                 BorderThickness = new Thickness(0, 0, 1, 0),
                 Padding = new Thickness(18, 28, 18, 20)
             };
 
-            var sideStack = new StackPanel();
+            _sideStack = new StackPanel();
 
             // Brand Header with Android-style glowing gradient logo badge
             var brandHeader = new StackPanel
@@ -274,13 +753,13 @@ namespace BeamDropWindows
                 Height = 38,
                 CornerRadius = new CornerRadius(11),
                 Background = new LinearGradientBrush(
-                    Color.FromRgb(0, 245, 212),
-                    Color.FromRgb(157, 78, 221),
+                    ElectricCyan,
+                    RadiantPurple,
                     45.0
                 ),
                 Effect = new DropShadowEffect
                 {
-                    Color = Color.FromRgb(0, 245, 212),
+                    Color = ElectricCyan,
                     BlurRadius = 14,
                     ShadowDepth = 0,
                     Opacity = 0.55
@@ -319,64 +798,65 @@ namespace BeamDropWindows
                 Margin = new Thickness(10, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            var brandText = new TextBlock
+            _brandText = new TextBlock
             {
                 Text = "BeamDrop",
                 FontSize = 20,
                 FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(TextPrimary)
+                Foreground = new SolidColorBrush(_currentTextPrimary)
             };
             var subText = new TextBlock
             {
                 Text = "Continuity",
                 FontSize = 10.5,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0, 245, 212))
+                Foreground = new SolidColorBrush(ElectricCyan)
             };
-            titleCol.Children.Add(brandText);
+            titleCol.Children.Add(_brandText);
             titleCol.Children.Add(subText);
             brandHeader.Children.Add(titleCol);
 
-            sideStack.Children.Add(brandHeader);
+            _sideStack.Children.Add(brandHeader);
 
             _navReceiveBtn = CreateNavButton("Receive", "📡", 0);
             _navSendBtn = CreateNavButton("Send", "➤", 1);
             _navSettingsBtn = CreateNavButton("Settings", "⚙", 2);
 
-            sideStack.Children.Add(_navReceiveBtn);
-            sideStack.Children.Add(_navSendBtn);
-            sideStack.Children.Add(_navSettingsBtn);
+            _sideStack.Children.Add(_navReceiveBtn);
+            _sideStack.Children.Add(_navSendBtn);
+            _sideStack.Children.Add(_navSettingsBtn);
 
-            sideStack.Children.Add(new TextBlock
+            _authorInfoText = new TextBlock
             {
                 Text = "Published by Sajjad Hossain\nv2.4.0 • Verified Windows App",
                 FontSize = 10.5,
-                Foreground = new SolidColorBrush(TextSecondary),
+                Foreground = new SolidColorBrush(_currentTextSecondary),
                 Margin = new Thickness(8, 28, 0, 0)
-            });
+            };
+            _sideStack.Children.Add(_authorInfoText);
 
-            sidebar.Child = sideStack;
-            Grid.SetColumn(sidebar, 0);
-            rootGrid.Children.Add(sidebar);
+            _sidebar.Child = _sideStack;
+            Grid.SetColumn(_sidebar, 0);
+            _rootGrid.Children.Add(_sidebar);
 
             // 2. Right Content Host
-            var contentHost = new Grid();
+            _contentHost = new Grid();
             _receiveView = BuildReceiveView();
             _sendView = BuildSendView();
             _settingsView = BuildSettingsView();
             _discreetTransferLayer = BuildDiscreetTransferProgressIndicator();
             _completionToastCard = BuildCompletionToast();
 
-            contentHost.Children.Add(_receiveView);
-            contentHost.Children.Add(_sendView);
-            contentHost.Children.Add(_settingsView);
-            contentHost.Children.Add(_discreetTransferLayer);
-            contentHost.Children.Add(_completionToastCard);
+            _contentHost.Children.Add(_receiveView);
+            _contentHost.Children.Add(_sendView);
+            _contentHost.Children.Add(_settingsView);
+            _contentHost.Children.Add(_discreetTransferLayer);
+            _contentHost.Children.Add(_completionToastCard);
 
-            Grid.SetColumn(contentHost, 1);
-            rootGrid.Children.Add(contentHost);
+            Grid.SetColumn(_contentHost, 1);
+            _rootGrid.Children.Add(_contentHost);
 
-            Content = rootGrid;
+            Content = _rootGrid;
         }
 
         private Border CreateNavButton(string label, string icon, int tabIndex)
@@ -661,7 +1141,28 @@ namespace BeamDropWindows
             });
 
             var actionsRow = new StackPanel { Orientation = Orientation.Horizontal };
-            actionsRow.Children.Add(CreateSmallActionButton("↻ Scan", TriggerSubnetScan));
+
+            _scanButton = new Border
+            {
+                Background = new SolidColorBrush(_currentCardSurface),
+                BorderBrush = new SolidColorBrush(_currentCardBorder),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12, 5, 12, 5),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = Cursors.Hand
+            };
+            _scanButtonText = new TextBlock
+            {
+                Text = "↻ Scan",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(_currentMintAccent)
+            };
+            _scanButton.Child = _scanButtonText;
+            _scanButton.MouseLeftButtonUp += (s, e) => OnScanClicked();
+            actionsRow.Children.Add(_scanButton);
+
             actionsRow.Children.Add(CreateSmallActionButton("⊕ Manual IP", PromptManualIpConnect));
             nearbyHeader.Children.Add(actionsRow);
             container.Children.Add(nearbyHeader);
@@ -714,63 +1215,67 @@ namespace BeamDropWindows
 
             var stack = new StackPanel
             {
-                MaxWidth = 560,
+                MaxWidth = 620,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
 
             stack.Children.Add(new TextBlock
             {
                 Text = "Settings",
-                FontSize = 22,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(TextPrimary),
+                FontSize = 24,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 24)
             });
 
-            // General Card
+            // 1. General & Appearance Card
             StackPanel generalRows;
-            var generalCard = CreateSettingsSectionCard("General", out generalRows);
-            AddSettingsBadgeRow(generalRows, "Theme", "Dark (LocalSend)");
-            AddSettingsBadgeRow(generalRows, "Color", "BeamDrop Emerald + Fluid Aurora");
-            AddSettingsToggleRow(generalRows, "60fps Fluid Aura Ripple & Particle Stream", _animationsEnabled, val => _animationsEnabled = val);
-            AddSettingsToggleRow(generalRows, "Discreet Self-Dismissing Progress Indicator", _autoFinishEnabled, val => _autoFinishEnabled = val);
+            var generalCard = CreateSettingsSectionCard("Appearance & Display", out generalRows);
+            AddSettingsThemeSelectorRow(generalRows);
+            AddSettingsToggleRow(generalRows, "60fps Fluid Aura Ripple & Particle Stream", _animationsEnabled, val => { _animationsEnabled = val; _settings.AnimationsEnabled = val; _settings.Save(); });
+            AddSettingsToggleRow(generalRows, "Discreet Self-Dismissing Progress Indicator", _autoFinishEnabled, val => { _autoFinishEnabled = val; _settings.AutoFinishEnabled = val; _settings.Save(); });
             stack.Children.Add(generalCard);
 
-            // Receive Card
+            // 2. Storage & Downloads Card
             StackPanel receiveRows;
-            var receiveCard = CreateSettingsSectionCard("Receive", out receiveRows);
-            AddSettingsActionRow(receiveRows, "Save to folder", _downloadDir, () => Process.Start("explorer.exe", _downloadDir));
-            AddSettingsBadgeRow(receiveRows, "Clear staged files immediately after Send", "Enabled");
+            var receiveCard = CreateSettingsSectionCard("Storage & Downloads", out receiveRows);
+            AddSettingsFolderRow(receiveRows, "Save to folder", _downloadDir);
+            AddSettingsToggleRow(receiveRows, "Auto-Accept incoming files without prompt", _settings.AutoAcceptFiles, val => { _settings.AutoAcceptFiles = val; _settings.Save(); });
             stack.Children.Add(receiveCard);
 
-            // Network Card
+            // 3. Device & Network Card
             StackPanel netRows;
-            var netCard = CreateSettingsSectionCard("Network", out netRows);
-            AddSettingsBadgeRow(netRows, "Device name", _deviceName);
+            var netCard = CreateSettingsSectionCard("Device & Network Discovery", out netRows);
+            AddSettingsDeviceNameRow(netRows, "Device name", _deviceName);
             AddSettingsBadgeRow(netRows, "Local IPv4", _localIp + " (" + "#" + (_localIp.Split('.').LastOrDefault() ?? "100") + ")");
             AddSettingsBadgeRow(netRows, "Port", TCP_PORT + " (TCP) / " + UDP_PORT + " (UDP)");
+            AddSettingsBadgeRow(netRows, "Device Presence Timeout", "Auto-removes devices after leaving Wi-Fi");
             stack.Children.Add(netCard);
 
-            // Publisher & Application Authenticity Card
+            // 4. System Integration & Performance Card
+            StackPanel sysRows;
+            var sysCard = CreateSettingsSectionCard("System Integration & Performance", out sysRows);
+            AddSettingsToggleRow(sysRows, "Launch BeamDrop on Windows Startup", _settings.RunOnStartup, val => { _settings.RunOnStartup = val; SetRunOnStartup(val); _settings.Save(); });
+            AddSettingsToggleRow(sysRows, "Minimize to System Tray (Keep alive in background)", _settings.MinimizeToTray, val => { _settings.MinimizeToTray = val; if (_trayIcon != null) _trayIcon.Visible = val; _settings.Save(); });
+            AddSettingsToggleRow(sysRows, "Notification Sound Chime on Transfer Complete", _settings.SoundChimeOnComplete, val => { _settings.SoundChimeOnComplete = val; _settings.Save(); });
+            AddSettingsToggleRow(sysRows, "Turbo Transfer Acceleration (100+ MB/s, 4MB TCP Windows)", _settings.TurboSpeedMode, val => { _settings.TurboSpeedMode = val; _settings.Save(); });
+            stack.Children.Add(sysCard);
+
+            // 5. Publisher & Authenticity Card
             StackPanel pubRows;
             var pubCard = CreateSettingsSectionCard("Publisher & Application Identity", out pubRows);
             AddSettingsBadgeRow(pubRows, "Publisher", "Sajjad Hossain");
             AddSettingsBadgeRow(pubRows, "Contact Email", "sajjadtheacid@gmail.com");
             AddSettingsBadgeRow(pubRows, "Product Name", "BeamDrop Continuity for Windows");
             AddSettingsBadgeRow(pubRows, "Version", "2.4.0.0 (64-bit Native WPF)");
-            AddSettingsBadgeRow(pubRows, "OS Trust Status", "Verified Windows 10/11 Application Manifest");
+            AddSettingsBadgeRow(pubRows, "OS Trust Status", "Verified Windows 10/11 Authenticode Signature");
             stack.Children.Add(pubCard);
 
             scroll.Content = stack;
             return scroll;
         }
 
-        /// <summary>
-        /// Builds a discreet, self-dismissing floating capsule progress indicator at the bottom center
-        /// (identical to Android's DiscreetTransferProgressIndicator) that replaces the notification queue
-        /// during active file transfers and clears immediately upon transfer completion.
-        /// </summary>
         private Grid BuildDiscreetTransferProgressIndicator()
         {
             var layer = new Grid
@@ -1931,6 +2436,8 @@ namespace BeamDropWindows
                     using (var client = new TcpClient())
                     {
                         client.NoDelay = true;
+                        client.SendBufferSize = 4 * 1024 * 1024;
+                        client.ReceiveBufferSize = 4 * 1024 * 1024;
                         await client.ConnectAsync(peer.Ip, peer.Port);
                         using (var stream = client.GetStream())
                         {
@@ -1938,7 +2445,8 @@ namespace BeamDropWindows
                             var headerBytes = Encoding.UTF8.GetBytes(header);
                             await stream.WriteAsync(headerBytes, 0, headerBytes.Length, token);
 
-                            byte[] buffer = new byte[65536];
+                            int chunkSize = (_settings != null && _settings.TurboSpeedMode) ? (1024 * 1024) : 65536;
+                            byte[] buffer = new byte[chunkSize];
                             for (int i = 0; i < files.Count; i++)
                             {
                                 var fi = new FileInfo(files[i]);
@@ -1946,7 +2454,7 @@ namespace BeamDropWindows
                                 var fhBytes = Encoding.UTF8.GetBytes(fileHeader);
                                 await stream.WriteAsync(fhBytes, 0, fhBytes.Length, token);
 
-                                using (var fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.Read))
+                                using (var fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, chunkSize, FileOptions.SequentialScan | FileOptions.Asynchronous))
                                 {
                                     int read;
                                     while ((read = await fs.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
@@ -1997,6 +2505,7 @@ namespace BeamDropWindows
                 string displayTitle = files.Count > 1 ? string.Format("{0} Files Sent!", files.Count) : "File Sent!";
                 string displayName = files.Count > 1 ? string.Format("{0} files", files.Count) : Path.GetFileName(firstFile);
                 ShowCompletionToast(displayTitle, string.Format("Delivered to {0}", peer.Name), displayName, totalBytes, firstFile);
+                PlayCompletionChime();
             }
             catch (Exception ex)
             {
@@ -2317,9 +2826,13 @@ namespace BeamDropWindows
                             RegisterDiscoveredPeer("peer_" + senderIp, senderName, senderIp, TCP_PORT, "PHONE");
                             ShowTransferOverlay("Receiving from " + senderName, "Incoming file...", 0.0, 0.0);
 
+                            client.NoDelay = true;
+                            client.ReceiveBufferSize = 4 * 1024 * 1024;
+                            client.SendBufferSize = 4 * 1024 * 1024;
                             long totalReceived = 0;
                             var sw = Stopwatch.StartNew();
-                            byte[] buffer = new byte[65536];
+                            int chunkSize = (_settings != null && _settings.TurboSpeedMode) ? (1024 * 1024) : 65536;
+                            byte[] buffer = new byte[chunkSize];
                             string lastDestPath = null;
                             string lastFileName = null;
 
@@ -2335,7 +2848,7 @@ namespace BeamDropWindows
                                 lastDestPath = destPath;
                                 lastFileName = fileName;
                                 long remaining = fileSize;
-                                using (var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                                using (var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, chunkSize, FileOptions.SequentialScan | FileOptions.Asynchronous))
                                 {
                                     while (remaining > 0)
                                     {
@@ -2377,6 +2890,7 @@ namespace BeamDropWindows
                             string displayTitle = fileCount > 1 ? string.Format("{0} Files Received!", fileCount) : "File Received!";
                             string displayName = fileCount > 1 ? string.Format("{0} files ({1})", fileCount, FormatFileSize(totalBytes)) : lastFileName;
                             ShowCompletionToast(displayTitle, string.Format("Received from {0}", senderName), displayName, totalBytes, lastDestPath);
+                            PlayCompletionChime();
                         }
                     }
                 }
@@ -2389,93 +2903,121 @@ namespace BeamDropWindows
 
         private async Task RunUdpBeaconListenerAsync(CancellationToken token)
         {
-            UdpClient udp = null;
-            try
+            while (!token.IsCancellationRequested)
             {
-                udp = new UdpClient();
-                udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                udp.Client.Bind(new IPEndPoint(IPAddress.Any, UDP_PORT));
-                while (!token.IsCancellationRequested)
+                UdpClient udp = null;
+                try
                 {
-                    var res = await udp.ReceiveAsync();
-                    string senderSocketIp = res.RemoteEndPoint != null ? res.RemoteEndPoint.Address.ToString() : "";
-                    string msg = Encoding.UTF8.GetString(res.Buffer).Trim();
-                    if (msg.StartsWith("BEAMDROP_BEACON|"))
+                    udp = new UdpClient();
+                    udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                    const int SIO_UDP_CONNRESET = -1744830452;
+                    try
                     {
-                        var parts = msg.Split('|');
-                        // Unified 6-part format: BEAMDROP_BEACON|<id>|<name>|<ip>|<port>|<type>
-                        if (parts.Length >= 6)
-                        {
-                            string peerId = parts[1];
-                            string name = parts[2];
-                            string rawIp = parts[3];
-                            string ip = (!string.IsNullOrEmpty(rawIp) && rawIp != "127.0.0.1" && rawIp != "0.0.0.0") ? rawIp : senderSocketIp;
-                            int port = TCP_PORT;
-                            int.TryParse(parts[4], out port);
-                            string type = parts[5];
-
-                            if (peerId != _deviceId && ip != _localIp)
-                            {
-                                RegisterDiscoveredPeer(peerId, name, ip, port, type);
-                                SendUnicastBeaconReply(ip);
-                            }
-                        }
-                        // Legacy 5-part format: BEAMDROP_BEACON|<name>|<ip>|<port>|<type>
-                        else if (parts.Length == 5)
-                        {
-                            string name = parts[1];
-                            string rawIp = parts[2];
-                            string ip = (!string.IsNullOrEmpty(rawIp) && rawIp != "127.0.0.1" && rawIp != "0.0.0.0") ? rawIp : senderSocketIp;
-                            int port = TCP_PORT;
-                            int.TryParse(parts[3], out port);
-                            string type = parts[4];
-
-                            if (ip != _localIp && name != _deviceName)
-                            {
-                                RegisterDiscoveredPeer("udp_" + ip, name, ip, port, type);
-                                SendUnicastBeaconReply(ip);
-                            }
-                        }
+                        udp.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
                     }
-                    else if (msg.StartsWith("BEAMDROP_AURA_PATH|"))
-                    {
-                        var parts = msg.Split('|');
-                        if (parts.Length >= 8 && senderSocketIp != _localIp)
-                        {
-                            string sessionId = parts[1];
-                            string srcDev = parts[2];
-                            string dstDev = parts[3];
-                            string fileName = parts[4];
-                            double prog = 0.0;
-                            double.TryParse(parts[5], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out prog);
-                            double speed = 0.0;
-                            double.TryParse(parts[6], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out speed);
-                            string stateToken = parts[7];
+                    catch { }
 
-                            if (stateToken == "COMPLETED" || stateToken == "CANCELLED" || prog >= 1.0)
+                    udp.Client.Bind(new IPEndPoint(IPAddress.Any, UDP_PORT));
+
+                    while (!token.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            var res = await udp.ReceiveAsync();
+                            string senderSocketIp = res.RemoteEndPoint != null ? res.RemoteEndPoint.Address.ToString() : "";
+                            string msg = Encoding.UTF8.GetString(res.Buffer).Trim();
+
+                            if (msg.StartsWith("BEAMDROP_BEACON|"))
                             {
-                                HideTransferOverlay();
+                                var parts = msg.Split('|');
+                                // Unified 6-part format: BEAMDROP_BEACON|<id>|<name>|<ip>|<port>|<type>
+                                if (parts.Length >= 6)
+                                {
+                                    string peerId = parts[1];
+                                    string name = parts[2];
+                                    string rawIp = parts[3];
+                                    string ip = (!string.IsNullOrEmpty(rawIp) && rawIp != "127.0.0.1" && rawIp != "0.0.0.0") ? rawIp : senderSocketIp;
+                                    int port = TCP_PORT;
+                                    int.TryParse(parts[4], out port);
+                                    string type = parts[5];
+
+                                    if (peerId != _deviceId && ip != _localIp)
+                                    {
+                                        RegisterDiscoveredPeer(peerId, name, ip, port, type);
+                                        SendUnicastBeaconReply(ip);
+                                    }
+                                }
+                                // Legacy 5-part format: BEAMDROP_BEACON|<name>|<ip>|<port>|<type>
+                                else if (parts.Length == 5)
+                                {
+                                    string name = parts[1];
+                                    string rawIp = parts[2];
+                                    string ip = (!string.IsNullOrEmpty(rawIp) && rawIp != "127.0.0.1" && rawIp != "0.0.0.0") ? rawIp : senderSocketIp;
+                                    int port = TCP_PORT;
+                                    int.TryParse(parts[3], out port);
+                                    string type = parts[4];
+
+                                    if (ip != _localIp && name != _deviceName)
+                                    {
+                                        RegisterDiscoveredPeer("udp_" + ip, name, ip, port, type);
+                                        SendUnicastBeaconReply(ip);
+                                    }
+                                }
                             }
-                            else
+                            else if (msg.StartsWith("BEAMDROP_AURA_PATH|"))
                             {
-                                _auraPathState.IsActive = true;
-                                _auraPathState.SessionId = sessionId;
-                                _auraPathState.SourceDeviceName = srcDev;
-                                _auraPathState.TargetDeviceName = dstDev;
-                                _auraPathState.FileName = fileName;
-                                _auraPathState.MigrationProgress = prog;
-                                _auraPathState.SpeedMbps = speed;
-                                _auraPathState.IsOutgoing = false;
-                                ShowTransferOverlay("Aura Sync from " + srcDev, fileName, prog, speed);
+                                var parts = msg.Split('|');
+                                if (parts.Length >= 8 && senderSocketIp != _localIp)
+                                {
+                                    string sessionId = parts[1];
+                                    string srcDev = parts[2];
+                                    string dstDev = parts[3];
+                                    string fileName = parts[4];
+                                    double prog = 0.0;
+                                    double.TryParse(parts[5], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out prog);
+                                    double speed = 0.0;
+                                    double.TryParse(parts[6], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out speed);
+                                    string stateToken = parts[7];
+
+                                    if (stateToken == "COMPLETED" || stateToken == "CANCELLED" || prog >= 1.0)
+                                    {
+                                        HideTransferOverlay();
+                                    }
+                                    else
+                                    {
+                                        _auraPathState.IsActive = true;
+                                        _auraPathState.SessionId = sessionId;
+                                        _auraPathState.SourceDeviceName = srcDev;
+                                        _auraPathState.TargetDeviceName = dstDev;
+                                        _auraPathState.FileName = fileName;
+                                        _auraPathState.MigrationProgress = prog;
+                                        _auraPathState.SpeedMbps = speed;
+                                        _auraPathState.IsOutgoing = false;
+                                        ShowTransferOverlay("Aura Sync from " + srcDev, fileName, prog, speed);
+                                    }
+                                }
                             }
+                        }
+                        catch (SocketException)
+                        {
+                            Thread.Sleep(50);
+                        }
+                        catch (Exception)
+                        {
+                            if (token.IsCancellationRequested) break;
+                            Thread.Sleep(100);
                         }
                     }
                 }
-            }
-            catch { }
-            finally
-            {
-                try { if (udp != null) udp.Close(); } catch { }
+                catch (Exception)
+                {
+                    if (token.IsCancellationRequested) break;
+                    Thread.Sleep(500);
+                }
+                finally
+                {
+                    try { if (udp != null) udp.Close(); } catch { }
+                }
             }
         }
 
@@ -2518,6 +3060,70 @@ namespace BeamDropWindows
             });
         }
 
+        private void BroadcastBeaconBurst()
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    using (var udp = new UdpClient())
+                    {
+                        udp.EnableBroadcast = true;
+                        string payload = string.Format("BEAMDROP_BEACON|{0}|{1}|{2}|{3}|COMPUTER", _deviceId, _deviceName, _localIp, TCP_PORT);
+                        byte[] data = Encoding.UTF8.GetBytes(payload);
+
+                        // 1. Global Broadcast
+                        await udp.SendAsync(data, data.Length, new IPEndPoint(IPAddress.Broadcast, UDP_PORT));
+
+                        // 2. All interface subnet broadcasts
+                        foreach (var bcast in GetAllSubnetBroadcastAddresses())
+                        {
+                            try { await udp.SendAsync(data, data.Length, new IPEndPoint(bcast, UDP_PORT)); } catch { }
+                        }
+
+                        // 3. Known peers unicast
+                        foreach (var peer in _peers.Values)
+                        {
+                            try { await udp.SendAsync(data, data.Length, new IPEndPoint(IPAddress.Parse(peer.Ip), UDP_PORT)); } catch { }
+                        }
+                    }
+                }
+                catch { }
+            });
+        }
+
+        private static List<IPAddress> GetAllSubnetBroadcastAddresses()
+        {
+            var list = new List<IPAddress>();
+            try
+            {
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    foreach (var ua in ni.GetIPProperties().UnicastAddresses)
+                    {
+                        if (ua.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(ua.Address))
+                        {
+                            string ipStr = ua.Address.ToString();
+                            int dot = ipStr.LastIndexOf('.');
+                            if (dot > 0)
+                            {
+                                string bcast = ipStr.Substring(0, dot + 1) + "255";
+                                IPAddress parsed;
+                                if (IPAddress.TryParse(bcast, out parsed) && !list.Contains(parsed))
+                                {
+                                    list.Add(parsed);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            if (list.Count == 0) list.Add(IPAddress.Broadcast);
+            return list;
+        }
+
         private async Task RunUdpBeaconBroadcasterAsync(CancellationToken token)
         {
             using (var udp = new UdpClient())
@@ -2528,19 +3134,16 @@ namespace BeamDropWindows
                     try
                     {
                         _localIp = ResolveBestLocalIp();
-                        // Unified 6-part beacon understood by Android NetworkDiscoveryManager & Windows
                         string payload = string.Format("BEAMDROP_BEACON|{0}|{1}|{2}|{3}|COMPUTER", _deviceId, _deviceName, _localIp, TCP_PORT);
                         byte[] data = Encoding.UTF8.GetBytes(payload);
 
                         // 1. Global Broadcast
                         await udp.SendAsync(data, data.Length, new IPEndPoint(IPAddress.Broadcast, UDP_PORT));
 
-                        // 2. Subnet Broadcast (e.g. 192.168.1.255)
-                        int lastDot = _localIp.LastIndexOf('.');
-                        if (lastDot > 0)
+                        // 2. All interface subnet broadcasts
+                        foreach (var bcast in GetAllSubnetBroadcastAddresses())
                         {
-                            string subnetBcast = _localIp.Substring(0, lastDot + 1) + "255";
-                            await udp.SendAsync(data, data.Length, new IPEndPoint(IPAddress.Parse(subnetBcast), UDP_PORT));
+                            try { await udp.SendAsync(data, data.Length, new IPEndPoint(bcast, UDP_PORT)); } catch { }
                         }
 
                         // 3. Direct Unicast refresh to known peers
@@ -2566,9 +3169,52 @@ namespace BeamDropWindows
             }
         }
 
+        private async void OnScanClicked()
+        {
+            if (_isScanning) return;
+            _isScanning = true;
+            if (_scanButtonText != null) _scanButtonText.Text = "↻ Scanning...";
+
+            try
+            {
+                // 1. Immediately prune any unresponsive known peers
+                var currentPeers = _peers.Values.ToList();
+                foreach (var peer in currentPeers)
+                {
+                    if ((DateTime.UtcNow - peer.LastSeen).TotalSeconds > 6.0)
+                    {
+                        bool alive = await ProbeSingleHostAsync(peer.Ip);
+                        if (!alive)
+                        {
+                            PeerNode removed;
+                            _peers.TryRemove(peer.Ip, out removed);
+                        }
+                    }
+                }
+                RefreshPeersListUi();
+
+                // 2. Immediate flurry of UDP broadcast beacons across all local interfaces
+                BroadcastBeaconBurst();
+
+                // 3. Parallel TCP Subnet Scan with 750ms timeout
+                await RunSubnetScanAsync();
+            }
+            finally
+            {
+                _isScanning = false;
+                if (_scanButtonText != null) _scanButtonText.Text = "↻ Scan";
+                RefreshPeersListUi();
+            }
+        }
+
         private void TriggerSubnetScan()
         {
-            Task.Run(async () =>
+            OnScanClicked();
+        }
+
+        private async Task RunSubnetScanAsync()
+        {
+            try
             {
                 _localIp = ResolveBestLocalIp();
                 int lastDot = _localIp.LastIndexOf('.');
@@ -2581,14 +3227,15 @@ namespace BeamDropWindows
                     string candidateIp = prefix + i;
                     if (candidateIp == _localIp) continue;
                     tasks.Add(ProbeSingleHostAsync(candidateIp));
-                    if (tasks.Count >= 32)
+                    if (tasks.Count >= 48)
                     {
                         await Task.WhenAll(tasks);
                         tasks.Clear();
                     }
                 }
                 if (tasks.Count > 0) await Task.WhenAll(tasks);
-            });
+            }
+            catch { }
         }
 
         private async Task<bool> ProbeSingleHostAsync(string ip)
@@ -2598,13 +3245,13 @@ namespace BeamDropWindows
                 using (var client = new TcpClient())
                 {
                     var connectTask = client.ConnectAsync(ip, TCP_PORT);
-                    var completed = await Task.WhenAny(connectTask, Task.Delay(320));
+                    var completed = await Task.WhenAny(connectTask, Task.Delay(750));
                     if (completed != connectTask || !client.Connected) return false;
 
                     using (var stream = client.GetStream())
                     {
-                        stream.ReadTimeout = 500;
-                        stream.WriteTimeout = 500;
+                        stream.ReadTimeout = 650;
+                        stream.WriteTimeout = 650;
                         string ping = string.Format("BEAMDROP_PING|{0}|{1}|COMPUTER\n", _deviceId, _deviceName);
                         byte[] pingBytes = Encoding.UTF8.GetBytes(ping);
                         await stream.WriteAsync(pingBytes, 0, pingBytes.Length);
@@ -2680,7 +3327,6 @@ namespace BeamDropWindows
                 RefreshPeersListUi();
             }
         }
-
         private static string ReadUtf8Line(Stream stream)
         {
             var bytes = new List<byte>(128);
@@ -2796,24 +3442,250 @@ namespace BeamDropWindows
         {
             var card = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(18, 30, 27)),
-                BorderBrush = new SolidColorBrush(CardBorder),
+                Background = new SolidColorBrush(_currentCardSurface),
+                BorderBrush = new SolidColorBrush(_currentCardBorder),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(14),
                 Padding = new Thickness(20, 16, 20, 16),
-                Margin = new Thickness(0, 0, 0, 18)
+                Margin = new Thickness(0, 0, 0, 18),
+                Effect = new DropShadowEffect
+                {
+                    Color = _isDarkMode ? Color.FromArgb(40, 0, 0, 0) : Color.FromArgb(30, 0, 0, 0),
+                    BlurRadius = 12,
+                    ShadowDepth = 2,
+                    Opacity = 0.25
+                }
             };
             rowsPanel = new StackPanel();
             rowsPanel.Children.Add(new TextBlock
             {
                 Text = title,
-                FontSize = 15,
+                FontSize = 14.5,
                 FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(TextPrimary),
+                Foreground = new SolidColorBrush(_currentTextPrimary),
                 Margin = new Thickness(0, 0, 0, 12)
             });
             card.Child = rowsPanel;
             return card;
+        }
+
+        private void AddSettingsThemeSelectorRow(StackPanel parent)
+        {
+            var dock = new DockPanel { Margin = new Thickness(0, 6, 0, 6) };
+            dock.Children.Add(new TextBlock
+            {
+                Text = "Theme",
+                FontSize = 13,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var segStack = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+
+            var darkPill = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(_isDarkMode ? _currentMintAccent : Color.FromArgb(35, 128, 128, 128)),
+                BorderBrush = new SolidColorBrush(_currentCardBorder),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 6, 12, 6),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = Cursors.Hand
+            };
+            darkPill.Child = new TextBlock
+            {
+                Text = "🌙 Dark Theme",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(_isDarkMode ? Color.FromRgb(15, 23, 42) : _currentTextPrimary)
+            };
+            darkPill.MouseLeftButtonUp += (s, e) =>
+            {
+                if (!_isDarkMode) ApplyTheme(true);
+            };
+
+            var lightPill = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(!_isDarkMode ? _currentMintAccent : Color.FromArgb(35, 128, 128, 128)),
+                BorderBrush = new SolidColorBrush(_currentCardBorder),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 6, 12, 6),
+                Cursor = Cursors.Hand
+            };
+            lightPill.Child = new TextBlock
+            {
+                Text = "☀️ Light Theme",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(!_isDarkMode ? Colors.White : _currentTextPrimary)
+            };
+            lightPill.MouseLeftButtonUp += (s, e) =>
+            {
+                if (_isDarkMode) ApplyTheme(false);
+            };
+
+            segStack.Children.Add(darkPill);
+            segStack.Children.Add(lightPill);
+            DockPanel.SetDock(segStack, Dock.Right);
+            dock.Children.Add(segStack);
+            parent.Children.Add(dock);
+        }
+
+        private void AddSettingsFolderRow(StackPanel parent, string label, string path)
+        {
+            var dock = new DockPanel { Margin = new Thickness(0, 6, 0, 6) };
+            var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            textStack.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(_currentTextPrimary)
+            });
+
+            var pathLabel = new TextBlock
+            {
+                Text = path,
+                FontSize = 11,
+                Foreground = new SolidColorBrush(_currentTextSecondary),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 310,
+                Margin = new Thickness(0, 2, 0, 0)
+            };
+            textStack.Children.Add(pathLabel);
+            dock.Children.Add(textStack);
+
+            var btnsRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+
+            var changeBtn = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(_currentMintAccent),
+                Padding = new Thickness(12, 6, 12, 6),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = Cursors.Hand
+            };
+            changeBtn.Child = new TextBlock
+            {
+                Text = "📁 Change...",
+                FontSize = 11.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(15, 23, 42))
+            };
+            changeBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                try
+                {
+                    var dlg = new System.Windows.Forms.FolderBrowserDialog
+                    {
+                        Description = "Select destination folder for received files",
+                        SelectedPath = _downloadDir,
+                        ShowNewFolderButton = true
+                    };
+                    if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK && !string.IsNullOrEmpty(dlg.SelectedPath))
+                    {
+                        _downloadDir = dlg.SelectedPath;
+                        _settings.DownloadDir = _downloadDir;
+                        _settings.Save();
+                        pathLabel.Text = _downloadDir;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Could not set folder: " + ex.Message, "BeamDrop", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            };
+            btnsRow.Children.Add(changeBtn);
+
+            var openBtn = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(Color.FromArgb(40, 128, 128, 128)),
+                BorderBrush = new SolidColorBrush(_currentCardBorder),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 6, 12, 6),
+                Cursor = Cursors.Hand
+            };
+            openBtn.Child = new TextBlock
+            {
+                Text = "↗ Open",
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(_currentTextPrimary)
+            };
+            openBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                try
+                {
+                    if (Directory.Exists(_downloadDir)) Process.Start("explorer.exe", _downloadDir);
+                }
+                catch { }
+            };
+            btnsRow.Children.Add(openBtn);
+
+            DockPanel.SetDock(btnsRow, Dock.Right);
+            dock.Children.Add(btnsRow);
+            parent.Children.Add(dock);
+        }
+
+        private void AddSettingsDeviceNameRow(StackPanel parent, string label, string name)
+        {
+            var dock = new DockPanel { Margin = new Thickness(0, 6, 0, 6) };
+            dock.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var rightStack = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+
+            var nameText = new TextBlock
+            {
+                Text = name,
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 12, 0)
+            };
+            rightStack.Children.Add(nameText);
+
+            var renameBtn = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(_currentMintAccent),
+                Padding = new Thickness(12, 6, 12, 6),
+                Cursor = Cursors.Hand
+            };
+            renameBtn.Child = new TextBlock
+            {
+                Text = "✏ Rename...",
+                FontSize = 11.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(15, 23, 42))
+            };
+            renameBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                var prompt = new PromptInputDialog("Rename Device", "Enter a custom name for this PC:", _deviceName, _isDarkMode);
+                prompt.Owner = this;
+                if (prompt.ShowDialog() == true && !string.IsNullOrWhiteSpace(prompt.InputText))
+                {
+                    _deviceName = prompt.InputText.Trim();
+                    _deviceId = "win_" + Math.Abs((_deviceName + "_" + _localIp).GetHashCode() % 1000000);
+                    _settings.DeviceName = _deviceName;
+                    _settings.Save();
+                    nameText.Text = _deviceName;
+                    if (_receiveDeviceNameText != null) _receiveDeviceNameText.Text = _deviceName.ToUpperInvariant();
+                    BroadcastBeaconBurst();
+                }
+            };
+            rightStack.Children.Add(renameBtn);
+
+            DockPanel.SetDock(rightStack, Dock.Right);
+            dock.Children.Add(rightStack);
+            parent.Children.Add(dock);
         }
 
         private void AddSettingsBadgeRow(StackPanel parent, string label, string value)
@@ -2823,56 +3695,26 @@ namespace BeamDropWindows
             {
                 Text = label,
                 FontSize = 13,
-                Foreground = new SolidColorBrush(TextPrimary),
+                Foreground = new SolidColorBrush(_currentTextPrimary),
                 VerticalAlignment = VerticalAlignment.Center
             });
 
             var badge = new Border
             {
                 CornerRadius = new CornerRadius(8),
-                Background = new SolidColorBrush(CardSurface),
-                Padding = new Thickness(14, 6, 14, 6),
+                Background = new SolidColorBrush(Color.FromArgb(35, 128, 128, 128)),
+                BorderBrush = new SolidColorBrush(_currentCardBorder),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 5, 12, 5),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Child = new TextBlock
                 {
                     Text = value,
-                    FontSize = 12,
+                    FontSize = 11.5,
                     FontWeight = FontWeights.SemiBold,
-                    Foreground = new SolidColorBrush(TextPrimary)
+                    Foreground = new SolidColorBrush(_currentTextPrimary)
                 }
             };
-            DockPanel.SetDock(badge, Dock.Right);
-            dock.Children.Add(badge);
-            parent.Children.Add(dock);
-        }
-
-        private void AddSettingsActionRow(StackPanel parent, string label, string value, Action onClick)
-        {
-            var dock = new DockPanel { Margin = new Thickness(0, 6, 0, 6) };
-            dock.Children.Add(new TextBlock
-            {
-                Text = label,
-                FontSize = 13,
-                Foreground = new SolidColorBrush(TextPrimary),
-                VerticalAlignment = VerticalAlignment.Center
-            });
-
-            var badge = new Border
-            {
-                CornerRadius = new CornerRadius(8),
-                Background = new SolidColorBrush(CardSurface),
-                Padding = new Thickness(14, 6, 14, 6),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Cursor = Cursors.Hand,
-                Child = new TextBlock
-                {
-                    Text = value,
-                    FontSize = 12,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = new SolidColorBrush(MintAccent)
-                }
-            };
-            badge.MouseLeftButtonUp += (s, e) => onClick();
             DockPanel.SetDock(badge, Dock.Right);
             dock.Children.Add(badge);
             parent.Children.Add(dock);
@@ -2886,16 +3728,18 @@ namespace BeamDropWindows
             {
                 Text = label,
                 FontSize = 13,
-                Foreground = new SolidColorBrush(TextPrimary),
-                VerticalAlignment = VerticalAlignment.Center
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                VerticalAlignment = VerticalAlignment.Center,
+                MaxWidth = 360,
+                TextWrapping = TextWrapping.Wrap
             });
 
             var pill = new Border
             {
-                Width = 52,
+                Width = 50,
                 Height = 26,
                 CornerRadius = new CornerRadius(13),
-                Background = new SolidColorBrush(state ? MintAccent : CardSurface),
+                Background = new SolidColorBrush(state ? _currentMintAccent : Color.FromArgb(60, 128, 128, 128)),
                 Padding = new Thickness(3),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Cursor = Cursors.Hand
@@ -2904,14 +3748,14 @@ namespace BeamDropWindows
             {
                 Width = 20,
                 Height = 20,
-                Fill = new SolidColorBrush(BgDark),
+                Fill = new SolidColorBrush(_currentBg),
                 HorizontalAlignment = state ? HorizontalAlignment.Right : HorizontalAlignment.Left
             };
             pill.Child = knob;
             pill.MouseLeftButtonUp += (s, e) =>
             {
                 state = !state;
-                pill.Background = new SolidColorBrush(state ? MintAccent : CardSurface);
+                pill.Background = new SolidColorBrush(state ? _currentMintAccent : Color.FromArgb(60, 128, 128, 128));
                 knob.HorizontalAlignment = state ? HorizontalAlignment.Right : HorizontalAlignment.Left;
                 onChanged(state);
             };

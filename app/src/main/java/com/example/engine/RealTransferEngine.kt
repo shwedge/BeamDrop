@@ -138,6 +138,8 @@ class RealTransferEngine(private val context: Context) {
             try {
                 socket.soTimeout = 30000
                 socket.tcpNoDelay = true
+                socket.receiveBufferSize = 4 * 1024 * 1024
+                socket.sendBufferSize = 4 * 1024 * 1024
                 val rawInputStream = socket.getInputStream()
                 val rawOutputStream = socket.getOutputStream()
 
@@ -232,7 +234,7 @@ class RealTransferEngine(private val context: Context) {
                     val fos = FileOutputStream(destinationFile)
 
                     var fileBytesRead = 0L
-                    val buffer = ByteArray(64 * 1024)
+                    val buffer = ByteArray(1024 * 1024)
                     var lastTime = System.currentTimeMillis()
                     var bytesSinceLastCalc = 0L
                     var currentSpeedMbps = 0f
@@ -329,6 +331,8 @@ class RealTransferEngine(private val context: Context) {
         val socket = Socket()
         try {
             socket.tcpNoDelay = true
+            socket.sendBufferSize = 4 * 1024 * 1024
+            socket.receiveBufferSize = 4 * 1024 * 1024
             socket.connect(InetSocketAddress(peer.ipAddress, peer.port), 10000)
             socket.soTimeout = 30000
 
@@ -350,7 +354,7 @@ class RealTransferEngine(private val context: Context) {
 
                 var itemBytesSent = 0L
                 val itemSize = item.sizeBytes
-                val buffer = ByteArray(64 * 1024)
+                val buffer = ByteArray(1024 * 1024)
 
                 var lastCalcTime = System.currentTimeMillis()
                 var bytesSinceLastCalc = 0L
