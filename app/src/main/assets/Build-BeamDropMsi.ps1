@@ -1,5 +1,5 @@
 # ============================================================================
-#   BeamDrop Continuity — Native Windows Installer (.MSI & .EXE) Builder
+#   BeamDrop Continuity - Native Windows Installer (.MSI and .EXE) Builder
 #   Publisher: Sajjad H0ssain (sajjadhossain1508@gmail.com)
 #   Product:   BeamDrop Continuity (v2.4.0.0)
 # ============================================================================
@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = "Continue"
 
 Write-Host "============================================================================" -ForegroundColor Cyan
-Write-Host "  BeamDrop Continuity — Standalone Windows Installer & App Setup" -ForegroundColor Cyan
+Write-Host "  BeamDrop Continuity - Standalone Windows Installer and App Setup" -ForegroundColor Cyan
 Write-Host "  Official Publisher: Sajjad H0ssain" -ForegroundColor Green
 Write-Host "  Product Version:    2.4.0.0" -ForegroundColor White
 Write-Host "============================================================================" -ForegroundColor Cyan
@@ -53,8 +53,7 @@ $manifestXml = @"
   </compatibility>
 </assembly>
 "@
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-[System.IO.File]::WriteAllText($manifestPath, $manifestXml, $utf8NoBom)
+[System.IO.File]::WriteAllText($manifestPath, $manifestXml, [System.Text.Encoding]::UTF8)
 
 # 2. Locate built-in Microsoft .NET Framework 4.x C# Compiler (csc.exe)
 $cscPath = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -64,19 +63,18 @@ if (-not (Test-Path -LiteralPath $cscPath)) {
     $wpfDir  = "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\WPF"
 }
 
-$sourceCs  = Join-Path $scriptDir "BeamDropWindows.cs"
-$targetExe = Join-Path $scriptDir "BeamDropApp.exe"
+$sourceCs    = Join-Path $scriptDir "BeamDropWindows.cs"
+$targetExe   = Join-Path $scriptDir "BeamDropApp.exe"
 $portableExe = Join-Path $scriptDir "BeamDrop.exe"
 
 if (-not (Test-Path -LiteralPath $sourceCs)) {
     Write-Host "[ERROR] BeamDropWindows.cs not found in $scriptDir" -ForegroundColor Red
-    Write-Host "Please extract all files from the ZIP archive before running." -ForegroundColor Yellow
     exit 1
 }
 
 Write-Host "[1/5] Compiling native WPF application BeamDropApp.exe..." -ForegroundColor Yellow
 
-# Close any existing running instance so output file isn't locked
+# Close any running instance so the output file is not locked
 try {
     Get-Process -Name "BeamDropApp", "BeamDrop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 300
@@ -91,6 +89,9 @@ try {
     "/r:System.dll" `
     "/r:System.Core.dll" `
     "/r:System.Xaml.dll" `
+    "/r:System.Drawing.dll" `
+    "/r:System.Windows.Forms.dll" `
+    "/r:System.Net.Http.dll" `
     "/r:$wpfDir\WindowsBase.dll" `
     "/r:$wpfDir\PresentationCore.dll" `
     "/r:$wpfDir\PresentationFramework.dll" `
@@ -102,9 +103,10 @@ if (-not (Test-Path -LiteralPath $targetExe)) {
 }
 
 Copy-Item -LiteralPath $targetExe -Destination $portableExe -Force -ErrorAction SilentlyContinue
-Write-Host "      Compiled successfully: BeamDrop.exe ($((Get-Item -LiteralPath $targetExe).Length) bytes)" -ForegroundColor Green
+$exeBytes = (Get-Item -LiteralPath $targetExe).Length
+Write-Host "      Compiled successfully: BeamDrop.exe ($exeBytes bytes)" -ForegroundColor Green
 
-# 3. Install Certificate & Sign Binaries with Sajjad H0ssain Authenticode Signature
+# 3. Install Certificate and Sign Binaries with Sajjad H0ssain Authenticode Signature
 $pfxFile = Join-Path $scriptDir "SajjadH0ssain_CodeSigning.pfx"
 $cerFile = Join-Path $scriptDir "SajjadH0ssain_CodeSigning.cer"
 
@@ -133,8 +135,8 @@ if (Test-Path -LiteralPath $pfxFile) {
     }
 }
 
-# 4. Install Application into Per-User Windows Programs & Register in Windows OS
-Write-Host "[3/5] Installing BeamDrop Continuity to Windows Programs & Desktop..." -ForegroundColor Yellow
+# 4. Install Application into Per-User Windows Programs and Register in Windows OS
+Write-Host "[3/5] Installing BeamDrop Continuity to Windows Programs and Desktop..." -ForegroundColor Yellow
 $installDir = Join-Path $env:LOCALAPPDATA "Programs\Sajjad H0ssain\BeamDrop"
 New-Item -ItemType Directory -Path $installDir -Force -ErrorAction SilentlyContinue | Out-Null
 $installedExe = Join-Path $installDir "BeamDrop.exe"
@@ -145,7 +147,7 @@ if (Test-Path -LiteralPath $cerFile) {
     Copy-Item -LiteralPath $cerFile -Destination (Join-Path $installDir "SajjadH0ssain_CodeSigning.cer") -Force -ErrorAction SilentlyContinue
 }
 
-# Create Desktop & Start Menu Shortcuts
+# Create Desktop and Start Menu Shortcuts
 try {
     $wsh = New-Object -ComObject WScript.Shell
     $desktopPath = [Environment]::GetFolderPath("Desktop")
@@ -161,10 +163,10 @@ try {
     $startShortcut.WorkingDirectory = $installDir
     $startShortcut.Description = "BeamDrop Continuity - Published by Sajjad H0ssain"
     $startShortcut.Save()
-    Write-Host "      Created Desktop & Start Menu shortcuts for BeamDrop Continuity." -ForegroundColor Green
+    Write-Host "      Created Desktop and Start Menu shortcuts for BeamDrop Continuity." -ForegroundColor Green
 } catch {}
 
-# Register in Windows Registry (Installed Apps / Programs & Features)
+# Register in Windows Registry (Installed Apps / Programs and Features)
 try {
     $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\BeamDropContinuity"
     New-Item -Path $regPath -Force -ErrorAction SilentlyContinue | Out-Null
@@ -188,20 +190,9 @@ try {
     $wi = New-Object -ComObject WindowsInstaller.Installer
     $db = $wi.OpenDatabase($msiPath, 1)
 
-    function Invoke-MsiSql($sql) {
+    function Invoke-MsiSql([string]$sql) {
         $v = $db.OpenView($sql)
         $v.Execute()
-        $v.Close()
-    }
-
-    function Add-MsiRow($sql, $vals) {
-        $v = $db.OpenView($sql)
-        $r = $wi.CreateRecord($vals.Count)
-        for ($i = 0; $i -lt $vals.Count; $i++) {
-            if ($vals[$i] -is [int]) { $r.IntegerData($i + 1) = $vals[$i] }
-            else { $r.StringData($i + 1) = [string]$vals[$i] }
-        }
-        $v.Execute($r)
         $v.Close()
     }
 
@@ -223,7 +214,14 @@ try {
         @("Manufacturer", "Sajjad H0ssain"),
         @("ARPCONTACT", "sajjadhossain1508@gmail.com")
     )
-    foreach ($p in $props) { Add-MsiRow "INSERT INTO Property (Property, Value) VALUES (?, ?)" $p }
+    foreach ($p in $props) {
+        $v = $db.OpenView("INSERT INTO Property (Property, Value) VALUES (?, ?)")
+        $r = $wi.CreateRecord(2)
+        $r.StringData(1) = [string]$p[0]
+        $r.StringData(2) = [string]$p[1]
+        $v.Execute($r)
+        $v.Close()
+    }
 
     $summary = $db.SummaryInformation(20)
     $summary.Property(2) = "BeamDrop Continuity Installer"

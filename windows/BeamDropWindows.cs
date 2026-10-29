@@ -20,6 +20,8 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using Microsoft.Win32;
+using Path = System.IO.Path;
+using SystemPath = System.Windows.Shapes.Path;
 
 [assembly: AssemblyTitle("BeamDrop — Universal Continuity & P2P File Sharing")]
 [assembly: AssemblyDescription("Official BeamDrop Continuity Desktop Application for Windows 10/11 — Published by Sajjad H0ssain")]
@@ -1037,7 +1039,7 @@ namespace BeamDropWindows
                 var fullGeo = new PathGeometry();
                 fullGeo.Figures.Add(fullFig);
 
-                var outerGlowPath = new Path
+                var outerGlowPath = new SystemPath
                 {
                     Data = fullGeo,
                     Stroke = new LinearGradientBrush(
@@ -1065,7 +1067,7 @@ namespace BeamDropWindows
                 var activeGeo = new PathGeometry();
                 activeGeo.Figures.Add(activeFig);
 
-                var activeStrokePath = new Path
+                var activeStrokePath = new SystemPath
                 {
                     Data = activeGeo,
                     Stroke = new LinearGradientBrush(ElectricCyan, RadiantPurple, 0.0),
@@ -1118,7 +1120,7 @@ namespace BeamDropWindows
             return new Point(x, y);
         }
 
-        private Path CreateArcSegment(double cx, double cy, double r, double startDeg, double sweepDeg, double thickness, Color color)
+        private SystemPath CreateArcSegment(double cx, double cy, double r, double startDeg, double sweepDeg, double thickness, Color color)
         {
             double startRad = startDeg * Math.PI / 180.0;
             double endRad = (startDeg + sweepDeg) * Math.PI / 180.0;
@@ -1138,7 +1140,7 @@ namespace BeamDropWindows
             var geo = new PathGeometry();
             geo.Figures.Add(fig);
 
-            return new Path
+            return new SystemPath
             {
                 Data = geo,
                 Stroke = new SolidColorBrush(color),
