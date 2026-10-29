@@ -1255,7 +1255,7 @@ namespace BeamDropWindows
                 }
             }
 
-            // 3. Render 60fps Fluid Aurora Particle Stream + Discreet Pulse Dot during active file transfer
+            // 3. Render 60fps Liquid Glass Aurora Edge Wavefront & Migrating File Card (matching Apple AirDrop / OneTransfer)
             if (_isTransferring && _oneTransferCanvas != null)
             {
                 if (_discreetPulseDot != null)
@@ -1267,83 +1267,110 @@ namespace BeamDropWindows
                 _oneTransferCanvas.Children.Clear();
                 double w = _oneTransferCanvas.ActualWidth > 100 ? _oneTransferCanvas.ActualWidth : 800;
                 double h = _oneTransferCanvas.ActualHeight > 100 ? _oneTransferCanvas.ActualHeight : 600;
-                double cx = w * 0.5;
-                double portalY = h * 0.08;
-                double targetY = h - 70;
 
-                // Liquid Top Continuity Aurora Bloom
-                for (int layer = 3; layer >= 1; layer--)
+                // Portal position along the right screen edge (facing the nearby device, as seen in the reference video)
+                double edgeX = w;
+                double edgeY = h * 0.46;
+
+                // A. THE RIGHT-EDGE LIQUID AURORA WAVEFRONT (from insaneartsio video frames mac_1000 & bloom_0165)
+                // 4 Dynamic Chromatic Dispersion Lobes bursting inward from the right bezel
+                for (int lobe = 4; lobe >= 1; lobe--)
                 {
-                    double rx = (95 + layer * 36) + Math.Sin(t * 4.5 + layer) * 12;
-                    double ry = (38 + layer * 18) + Math.Cos(t * 3.8 + layer) * 6;
-                    Color layerCol = layer == 1 ? ElectricCyan : (layer == 2 ? RadiantPurple : MintAccent);
-                    var blob = new Ellipse
+                    double lobeW = (80 + lobe * 58) + Math.Sin(t * 3.6 + lobe * 1.2) * 24.0;
+                    double lobeH = (190 + lobe * 88) + Math.Cos(t * 2.8 + lobe * 0.9) * 36.0;
+
+                    Color lobeColor;
+                    byte lobeAlpha;
+                    if (lobe == 1)
                     {
-                        Width = rx * 2,
-                        Height = ry * 2,
-                        Fill = new SolidColorBrush(Color.FromArgb((byte)(75 / layer), layerCol.R, layerCol.G, layerCol.B))
+                        lobeColor = Colors.White;
+                        lobeAlpha = 225; // Pure white-hot specular glare at the bezel
+                    }
+                    else if (lobe == 2)
+                    {
+                        lobeColor = ElectricCyan;
+                        lobeAlpha = 150; // Electric cyan fluid core
+                    }
+                    else if (lobe == 3)
+                    {
+                        lobeColor = RadiantPurple;
+                        lobeAlpha = 100; // Celestial violet chromatic diffusion
+                    }
+                    else
+                    {
+                        lobeColor = SolarAmber;
+                        lobeAlpha = 60; // Golden sunset diffraction fringe
+                    }
+
+                    var bloomLobe = new Ellipse
+                    {
+                        Width = lobeW * 2,
+                        Height = lobeH * 2,
+                        Fill = new RadialGradientBrush(
+                            Color.FromArgb(lobeAlpha, lobeColor.R, lobeColor.G, lobeColor.B),
+                            Color.FromArgb(0, lobeColor.R, lobeColor.G, lobeColor.B))
                     };
-                    Canvas.SetLeft(blob, cx - rx);
-                    Canvas.SetTop(blob, portalY - ry * 0.6);
-                    _oneTransferCanvas.Children.Add(blob);
+                    Canvas.SetLeft(bloomLobe, edgeX - lobeW * 1.15);
+                    Canvas.SetTop(bloomLobe, edgeY - lobeH);
+                    _oneTransferCanvas.Children.Add(bloomLobe);
                 }
 
-                // Expanding continuity aura rings
-                for (int r = 0; r < 3; r++)
+                // Concentric Liquid Ripple Shockwaves radiating from the right edge inward
+                for (int r = 0; r < 4; r++)
                 {
-                    double phase = ((t * 0.85) + r * 0.33) % 1.0;
-                    double rad = 32 + phase * 220;
-                    byte alpha = (byte)((1.0 - phase) * 125);
-                    var ring = new Ellipse
+                    double phase = ((t * 0.72) + r * 0.25) % 1.0;
+                    double ringW = 45 + phase * 350;
+                    double ringH = 75 + phase * 480;
+                    byte alpha = (byte)((1.0 - phase) * 160);
+
+                    Color ringColor = r % 2 == 0 ? ElectricCyan : RadiantPurple;
+                    var rippleArc = new Ellipse
                     {
-                        Width = rad * 2,
-                        Height = rad * 2,
-                        Stroke = new SolidColorBrush(Color.FromArgb(alpha, 0, 245, 212)),
-                        StrokeThickness = 2.2 * (1.0 - phase * 0.5)
+                        Width = ringW * 2,
+                        Height = ringH * 2,
+                        Stroke = new LinearGradientBrush(
+                            Color.FromArgb(alpha, ringColor.R, ringColor.G, ringColor.B),
+                            Color.FromArgb(0, 94, 212, 187),
+                            0.0),
+                        StrokeThickness = 2.4 * (1.0 - phase * 0.45)
                     };
-                    Canvas.SetLeft(ring, cx - rad);
-                    Canvas.SetTop(ring, portalY - rad * 0.4);
-                    _oneTransferCanvas.Children.Add(ring);
+                    Canvas.SetLeft(rippleArc, edgeX - ringW * 1.25);
+                    Canvas.SetTop(rippleArc, edgeY - ringH);
+                    _oneTransferCanvas.Children.Add(rippleArc);
                 }
 
-                // 36 High-Velocity Fluid Aurora Particles streaming into the discreet bottom capsule
-                for (int p = 0; p < 36; p++)
+                // Top Ambient Liquid Glow (Continuity Luminescence across the top edge)
+                for (int layer = 2; layer >= 1; layer--)
                 {
-                    double speed = 1.2 + (p % 6) * 0.22;
-                    double progress = ((t * speed) + (p * 0.07)) % 1.0;
-                    double py = portalY + (targetY - portalY) * progress;
-                    double wave = Math.Sin(progress * Math.PI * 3.0 + t * 5.0 + p) * (48.0 * (1.0 - Math.Abs(progress - 0.5)));
-                    double px = cx + wave;
-                    double size = 3.8 + (p % 4) * 1.8;
-                    byte pAlpha = (byte)(Math.Sin(progress * Math.PI) * 215);
-
-                    var dot = new Ellipse
+                    double topRx = (120 + layer * 45) + Math.Sin(t * 3.5 + layer) * 15;
+                    double topRy = (40 + layer * 18) + Math.Cos(t * 3.0 + layer) * 8;
+                    Color topCol = layer == 1 ? ElectricCyan : RadiantPurple;
+                    var topBlob = new Ellipse
                     {
-                        Width = size,
-                        Height = size * 2.2,
-                        Fill = new SolidColorBrush(p % 3 == 0
-                            ? Color.FromArgb(pAlpha, 0, 245, 212)
-                            : (p % 3 == 1 ? Color.FromArgb(pAlpha, 157, 78, 221) : Color.FromArgb(pAlpha, 56, 189, 248)))
+                        Width = topRx * 2,
+                        Height = topRy * 2,
+                        Fill = new SolidColorBrush(Color.FromArgb((byte)(50 / layer), topCol.R, topCol.G, topCol.B))
                     };
-                    Canvas.SetLeft(dot, px - size * 0.5);
-                    Canvas.SetTop(dot, py - size);
-                    _oneTransferCanvas.Children.Add(dot);
+                    Canvas.SetLeft(topBlob, w * 0.5 - topRx);
+                    Canvas.SetTop(topBlob, -topRy * 0.5);
+                    _oneTransferCanvas.Children.Add(topBlob);
                 }
 
-                // 4. Shared Cross-Platform Canvas 'Aura Path' (Cubic Bezier Payload Migration from Source Button to Target Device)
+                // B. THE SHARED CROSS-PLATFORM CUBIC BEZIER CONDUIT
                 Point p0 = (_auraPathState.SourceButtonPoint.X > 10 && _auraPathState.SourceButtonPoint.Y > 10)
                     ? _auraPathState.SourceButtonPoint
-                    : (_auraPathState.IsOutgoing ? new Point(w * 0.68, h * 0.52) : new Point(cx, portalY + 12));
+                    : (_auraPathState.IsOutgoing ? new Point(w * 0.65, h * 0.55) : new Point(edgeX + 15, edgeY));
+
                 Point p3 = (_auraPathState.TargetDevicePoint.X > 10 && _auraPathState.TargetDevicePoint.Y > 10)
                     ? _auraPathState.TargetDevicePoint
-                    : (_auraPathState.IsOutgoing ? new Point(cx, portalY + 18) : new Point(cx, h * 0.52));
+                    : (_auraPathState.IsOutgoing ? new Point(edgeX - 25, edgeY) : new Point(w - 180, 110));
 
                 double dy = p3.Y - p0.Y;
-                double swing = Math.Sin(t * 2.6) * (w * 0.14);
-                Point p1 = new Point(Math.Max(30, Math.Min(w - 30, p0.X + (p3.X - p0.X) * 0.25 - 110 + swing * 0.4)), p0.Y + dy * 0.32);
-                Point p2 = new Point(Math.Max(30, Math.Min(w - 30, p0.X + (p3.X - p0.X) * 0.75 + 110 - swing * 0.4)), p0.Y + dy * 0.68);
+                double swing = Math.Sin(t * 2.8) * (w * 0.08);
+                Point p1 = new Point(Math.Max(30, Math.Min(w - 30, p0.X + (p3.X - p0.X) * 0.28 - 70 + swing * 0.3)), p0.Y + dy * 0.30);
+                Point p2 = new Point(Math.Max(30, Math.Min(w - 30, p0.X + (p3.X - p0.X) * 0.72 + 70 - swing * 0.3)), p0.Y + dy * 0.70);
 
-                // Full Cubic Bezier Aura Conduit Track
+                // Full Bezier Aura Conduit Glow
                 var fullFig = new PathFigure { StartPoint = p0, IsClosed = false };
                 fullFig.Segments.Add(new BezierSegment(p1, p2, p3, true));
                 var fullGeo = new PathGeometry();
@@ -1353,20 +1380,20 @@ namespace BeamDropWindows
                 {
                     Data = fullGeo,
                     Stroke = new LinearGradientBrush(
-                        Color.FromArgb(68, 94, 212, 187),
+                        Color.FromArgb(70, 0, 245, 212),
                         Color.FromArgb(75, 157, 78, 221),
                         45.0),
-                    StrokeThickness = 20,
+                    StrokeThickness = 22,
                     StrokeStartLineCap = PenLineCap.Round,
                     StrokeEndLineCap = PenLineCap.Round
                 };
                 _oneTransferCanvas.Children.Add(outerGlowPath);
 
-                // Active Illuminated Migration Sub-Curve (0.0 -> migrationProgress)
+                // Active Illuminated Migration Conduit
                 double migProg = Math.Max(0.02, Math.Min(1.0, _auraPathState.IsActive ? _auraPathState.MigrationProgress : _transferProgress));
                 var activeFig = new PathFigure { StartPoint = p0, IsClosed = false };
                 var polySeg = new PolyLineSegment();
-                int steps = 42;
+                int steps = 44;
                 int maxStep = Math.Max(1, (int)(steps * migProg));
                 for (int s = 1; s <= maxStep; s++)
                 {
@@ -1381,41 +1408,173 @@ namespace BeamDropWindows
                 {
                     Data = activeGeo,
                     Stroke = new LinearGradientBrush(ElectricCyan, RadiantPurple, 0.0),
-                    StrokeThickness = 6.5,
+                    StrokeThickness = 6.0,
                     StrokeStartLineCap = PenLineCap.Round,
                     StrokeEndLineCap = PenLineCap.Round
                 };
                 _oneTransferCanvas.Children.Add(activeStrokePath);
 
-                // Migrating File Payload Orb at B(migProg)
-                Point payloadPt = EvaluateCubicBezier(p0, p1, p2, p3, migProg);
-                double orbPulse = 1.0 + 0.22 * Math.Sin(t * 7.5);
-                double orbR = 24.0 * orbPulse;
-
-                var orbGlow = new Ellipse
+                // 24 Luminescent Cometary Micro-Filaments trailing behind the payload
+                for (int p = 0; p < 24; p++)
                 {
-                    Width = orbR * 2.2,
-                    Height = orbR * 2.2,
+                    double trailOffset = (p * 0.035);
+                    double trailProg = Math.Max(0.0, migProg - trailOffset);
+                    if (trailProg > 0.01)
+                    {
+                        Point trailPt = EvaluateCubicBezier(p0, p1, p2, p3, trailProg);
+                        double wobble = Math.Sin(t * 8.0 + p) * (14.0 * (1.0 - (double)p / 24.0));
+                        byte trailAlpha = (byte)((1.0 - (double)p / 24.0) * 180);
+                        double pSize = 3.5 + (p % 3) * 1.8;
+
+                        var particle = new Ellipse
+                        {
+                            Width = pSize,
+                            Height = pSize,
+                            Fill = new SolidColorBrush(p % 2 == 0
+                                ? Color.FromArgb(trailAlpha, 0, 245, 212)
+                                : Color.FromArgb(trailAlpha, 157, 78, 221))
+                        };
+                        Canvas.SetLeft(particle, trailPt.X + wobble - pSize * 0.5);
+                        Canvas.SetTop(particle, trailPt.Y + wobble * 0.5 - pSize * 0.5);
+                        _oneTransferCanvas.Children.Add(particle);
+                    }
+                }
+
+                // C. THE MIGRATING LIQUID FROSTED GLASS FILE CARD (Matching insaneartsio video frames land_0300 & drop_0350)
+                Point payloadPt = EvaluateCubicBezier(p0, p1, p2, p3, migProg);
+                string fileName = !string.IsNullOrEmpty(_auraPathState.FileName)
+                    ? _auraPathState.FileName
+                    : (!string.IsNullOrEmpty(_transferFileText.Text) ? _transferFileText.Text : "Incoming_File.bin");
+
+                double cardW = 126;
+                double cardH = 76;
+                double cardX = payloadPt.X - cardW * 0.5;
+                double cardY = payloadPt.Y - cardH * 0.5;
+
+                // Outer Glass Halo Glow
+                double haloR = 48 + Math.Sin(t * 7.0) * 6;
+                var cardGlow = new Ellipse
+                {
+                    Width = haloR * 2.4,
+                    Height = haloR * 2.0,
                     Fill = new RadialGradientBrush(
-                        Color.FromArgb(225, 0, 245, 212),
+                        Color.FromArgb(195, 0, 245, 212),
                         Color.FromArgb(0, 157, 78, 221))
                 };
-                Canvas.SetLeft(orbGlow, payloadPt.X - orbR * 1.1);
-                Canvas.SetTop(orbGlow, payloadPt.Y - orbR * 1.1);
-                _oneTransferCanvas.Children.Add(orbGlow);
+                Canvas.SetLeft(cardGlow, payloadPt.X - haloR * 1.2);
+                Canvas.SetTop(cardGlow, payloadPt.Y - haloR);
+                _oneTransferCanvas.Children.Add(cardGlow);
 
-                var orbCore = new Ellipse
+                // Frosted Glass Card Container
+                var glassCard = new Border
                 {
-                    Width = 14,
-                    Height = 14,
-                    Fill = Brushes.White,
-                    Stroke = new SolidColorBrush(SolarAmber),
-                    StrokeThickness = 2.5
+                    Width = cardW,
+                    Height = cardH,
+                    CornerRadius = new CornerRadius(14),
+                    Background = new SolidColorBrush(Color.FromArgb(220, 18, 32, 28)),
+                    BorderBrush = new LinearGradientBrush(
+                        Color.FromArgb(240, 255, 255, 255),
+                        Color.FromArgb(180, 0, 245, 212),
+                        45.0),
+                    BorderThickness = new Thickness(1.4),
+                    Padding = new Thickness(10, 8, 10, 8),
+                    Effect = new DropShadowEffect
+                    {
+                        Color = ElectricCyan,
+                        BlurRadius = 24,
+                        ShadowDepth = 3,
+                        Opacity = 0.55
+                    }
                 };
-                Canvas.SetLeft(orbCore, payloadPt.X - 7);
-                Canvas.SetTop(orbCore, payloadPt.Y - 7);
-                _oneTransferCanvas.Children.Add(orbCore);
+
+                var cardStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                var cardHeader = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+
+                cardHeader.Children.Add(new TextBlock
+                {
+                    Text = GetFileCategoryEmoji(fileName),
+                    FontSize = 18,
+                    Margin = new Thickness(0, 0, 6, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+
+                cardHeader.Children.Add(new TextBlock
+                {
+                    Text = string.Format("{0:F0}%", migProg * 100.0),
+                    FontSize = 11.5,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(ElectricCyan),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                cardStack.Children.Add(cardHeader);
+
+                cardStack.Children.Add(new TextBlock
+                {
+                    Text = fileName,
+                    FontSize = 10.5,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Colors.White),
+                    TextAlignment = TextAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Margin = new Thickness(0, 4, 0, 4)
+                });
+
+                // Mini Glass Progress Bar inside the card
+                var miniTrack = new Border
+                {
+                    Height = 3.5,
+                    CornerRadius = new CornerRadius(1.75),
+                    Background = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
+                    ClipToBounds = true
+                };
+                miniTrack.Child = new Border
+                {
+                    Height = 3.5,
+                    CornerRadius = new CornerRadius(1.75),
+                    Width = Math.Max(4, (cardW - 20) * migProg),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Background = new LinearGradientBrush(ElectricCyan, SolarAmber, 0.0)
+                };
+                cardStack.Children.Add(miniTrack);
+
+                glassCard.Child = cardStack;
+                Canvas.SetLeft(glassCard, cardX);
+                Canvas.SetTop(glassCard, cardY);
+                _oneTransferCanvas.Children.Add(glassCard);
+
+                // D. ARRIVAL SHOCKWAVE AT DESTINATION (When progress approaches landing, matching drop_0350)
+                if (migProg > 0.85)
+                {
+                    double arrPhase = (migProg - 0.85) / 0.15;
+                    for (int aw = 0; aw < 2; aw++)
+                    {
+                        double awRad = 20 + (arrPhase + aw * 0.4) * 55;
+                        byte awAlpha = (byte)((1.0 - Math.Min(1.0, arrPhase)) * 175);
+                        var arrRing = new Ellipse
+                        {
+                            Width = awRad * 2,
+                            Height = awRad * 2,
+                            Stroke = new SolidColorBrush(aw == 0 ? Color.FromArgb(awAlpha, 255, 183, 3) : Color.FromArgb(awAlpha, 0, 245, 212)),
+                            StrokeThickness = 2.0
+                        };
+                        Canvas.SetLeft(arrRing, p3.X - awRad);
+                        Canvas.SetTop(arrRing, p3.Y - awRad);
+                        _oneTransferCanvas.Children.Add(arrRing);
+                    }
+                }
             }
+        }
+
+        
+        private static string GetFileCategoryEmoji(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return "📄";
+            string ext = Path.GetExtension(fileName).ToLowerInvariant();
+            if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" || ext == ".gif") return "🖼";
+            if (ext == ".mp4" || ext == ".mkv" || ext == ".mov" || ext == ".avi") return "🎬";
+            if (ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".m4a") return "🎵";
+            if (ext == ".zip" || ext == ".rar" || ext == ".7z" || ext == ".apk" || ext == ".exe") return "📦";
+            return "📄";
         }
 
         private static Point EvaluateCubicBezier(Point p0, Point p1, Point p2, Point p3, double t)
