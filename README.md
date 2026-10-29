@@ -1,7 +1,7 @@
 # ⚡ BeamDrop Continuity
 
 > **Apple-Style Fluid Ecosystem for Android & Windows 10/11**  
-> **Official Publisher:** Sajjad H0ssain (`sajjadhossain1508@gmail.com`)  
+> **Official Publisher:** Sajjad Hossain (`sajjadhossain1508@gmail.com`)  
 > **Product Version:** 2.4.0.0
 
 ---
@@ -12,7 +12,7 @@
 - **Peer-to-Peer Zero-Config Discovery**: Automatic peer discovery over local Wi-Fi / LAN (TCP `8988`, UDP `8989`), Wi-Fi Direct (`WifiP2pManager`), and NFC tap discovery.
 - **Discreet Self-Dismissing Progress**: High-speed, self-dismissing progress indicator that replaces notification queues during active transfers and clears completely upon transfer completion.
 - **Hardware-Accelerated Windows Client**: Native 64-bit WPF application (`BeamDropWindows.cs`) running at 60 FPS with hardware-accelerated fluid aurora ripples, dark theme, and dual-mode transfer server/client.
-- **Crash-Proof 1-Click Windows MSI & App Setup**: Includes `Package_BeamDropmsi.bat` (and `Package-BeamDropMsi.bat`) with automatic Mark-of-the-Web unblocking, Authenticode certificate registration (`Install-Certificate.bat`), local installation to `%LOCALAPPDATA%\Programs\Sajjad H0ssain\BeamDrop\BeamDrop.exe`, Desktop shortcut generation, and `BeamDropInstaller.msi` builder.
+- **Crash-Proof 1-Click Windows MSI & App Setup**: Includes `Package_BeamDropmsi.bat` (and `Package-BeamDropMsi.bat`) with automatic Mark-of-the-Web unblocking, Authenticode certificate registration (`Install-Certificate.bat`), local installation to `%LOCALAPPDATA%\Programs\Sajjad Hossain\BeamDrop\BeamDrop.exe`, Desktop shortcut generation, and `BeamDropInstaller.msi` builder.
 
 ---
 
@@ -29,13 +29,14 @@ BeamDrop/
 │   └── build.gradle.kts               # Dedicated packageWindowsInstaller Gradle tasks
 ├── windows/                           # Standalone Windows Desktop Client & MSI Installer
 │   ├── BeamDropWindows.cs             # Native 64-bit C# WPF Continuity Desktop application
+│   ├── BeamDrop.ico                   # Official High-Definition Windows Application Logo
 │   ├── Package_BeamDropmsi.bat        # 1-Click Crash-Proof Installer & Launcher
 │   ├── Package-BeamDropMsi.bat        # Alias for 1-Click Installer
 │   ├── Run-BeamDrop.bat               # Direct native compiler & runner
 │   ├── Build-BeamDropMsi.ps1          # Authenticode signing & MSI package generator
-│   ├── Install-Certificate.bat        # Registers Sajjad H0ssain certificate into Trusted Store
-│   ├── SajjadH0ssain_CodeSigning.cer  # Authenticode Public Certificate
-│   ├── SajjadH0ssain_CodeSigning.pfx  # Code Signing Certificate
+│   ├── Install-Certificate.bat        # Registers Sajjad Hossain certificate into Trusted Store
+│   ├── SajjadHossain_CodeSigning.cer  # Authenticode Public Certificate
+│   ├── SajjadHossain_CodeSigning.pfx  # Code Signing Certificate
 │   └── BeamDrop.exe.manifest          # Windows DPI-Aware & Trust Manifest
 ├── public/                            # Public distribution assets
 └── gradle/                            # Gradle wrapper configuration
@@ -54,9 +55,9 @@ BeamDrop/
    ```
 2. Double-click `Package_BeamDropmsi.bat` (or `Package-BeamDropMsi.bat`):
    - Automatically unblocks Windows Mark-of-the-Web flags.
-   - Installs the app to `%LOCALAPPDATA%\Programs\Sajjad H0ssain\BeamDrop\BeamDrop.exe`.
+   - Installs the app to `%LOCALAPPDATA%\Programs\Sajjad Hossain\BeamDrop\BeamDrop.exe`.
    - Creates a Desktop shortcut and launches BeamDrop Continuity.
-3. To eliminate Windows Defender / SmartScreen false alarms, run `Install-Certificate.bat` as Administrator once to trust the `Sajjad H0ssain` publisher certificate.
+3. To eliminate Windows Defender / SmartScreen false alarms, run `Install-Certificate.bat` as Administrator once to trust the `Sajjad Hossain` publisher certificate.
 
 ### Android Application
 
@@ -70,4 +71,4 @@ BeamDrop/
 
 ## 🛡️ License & Copyright
 
-Published & Maintained by **Sajjad H0ssain** (`sajjadhossain1508@gmail.com`). All rights reserved.
+Published & Maintained by **Sajjad Hossain** (`sajjadhossain1508@gmail.com`). All rights reserved.

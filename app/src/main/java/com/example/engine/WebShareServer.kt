@@ -150,8 +150,8 @@ class WebShareServer(
                 method == "GET" && (rawPath.startsWith("/download-windows-package") || rawPath.startsWith("/download-windows-installer") || rawPath.startsWith("/download-windows-binary") || rawPath.equals("/BeamDrop-Windows-Installer.zip", ignoreCase = true) || rawPath.equals("/BeamDrop.exe", ignoreCase = true)) -> {
                     serveAssetFile(rawOut, "BeamDrop-Windows-Installer.zip", "application/zip", "BeamDrop-Windows-Installer-v2.4.0.zip")
                 }
-                method == "GET" && (rawPath.startsWith("/download-certificate") || rawPath.endsWith("SajjadH0ssain_CodeSigning.cer")) -> {
-                    serveAssetFile(rawOut, "SajjadH0ssain_CodeSigning.cer", "application/x-x509-ca-cert", "SajjadH0ssain_CodeSigning.cer")
+                method == "GET" && (rawPath.startsWith("/download-certificate") || rawPath.endsWith("SajjadHossain_CodeSigning.cer") || rawPath.endsWith("SajjadH0ssain_CodeSigning.cer")) -> {
+                    serveAssetFile(rawOut, "SajjadHossain_CodeSigning.cer", "application/x-x509-ca-cert", "SajjadHossain_CodeSigning.cer")
                 }
                 method == "GET" && (rawPath.startsWith("/download-windows-bat") || rawPath.startsWith("/download-windows-exe") || rawPath.equals("/Package_BeamDropmsi.bat", ignoreCase = true) || rawPath.equals("/Package-BeamDropMsi.bat", ignoreCase = true)) -> {
                     serveAssetFile(rawOut, "Package_BeamDropmsi.bat", "application/bat", "Package_BeamDropmsi.bat")
@@ -195,14 +195,14 @@ class WebShareServer(
         val phoneIp = getLocalIp()
         val batScript = buildString {
             append("@echo off\r\n")
-            append("title BeamDrop Native Windows App Setup and Launcher - Published by Sajjad H0ssain\r\n")
+            append("title BeamDrop Native Windows App Setup and Launcher - Published by Sajjad Hossain\r\n")
             append("echo ============================================================================\r\n")
             append("echo   BeamDrop Continuity - Native Windows Desktop App (.EXE) Installer\r\n")
-            append("echo   Publisher: Sajjad H0ssain\r\n")
+            append("echo   Publisher: Sajjad Hossain\r\n")
             append("echo   Connected Phone: $deviceName ($phoneIp)\r\n")
             append("echo ============================================================================\r\n")
             append("echo.\r\n")
-            append("set \"APP_DIR=%LOCALAPPDATA%\\Programs\\Sajjad H0ssain\\BeamDrop\"\r\n")
+            append("set \"APP_DIR=%LOCALAPPDATA%\\Programs\\Sajjad Hossain\\BeamDrop\"\r\n")
             append("if not exist \"%APP_DIR%\" mkdir \"%APP_DIR%\"\r\n")
             append("cd /d \"%APP_DIR%\"\r\n")
             append("echo [1/3] Downloading native WPF C# source from Android phone ($phoneIp:$port)...\r\n")
@@ -211,7 +211,7 @@ class WebShareServer(
             append("if not exist \"%CSC_PATH%\" set \"CSC_PATH=%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe\"\r\n")
             append("set \"WPF_DIR=%WINDIR%\\Microsoft.NET\\Framework64\\v4.0.30319\\WPF\"\r\n")
             append("if not exist \"%WPF_DIR%\" set \"WPF_DIR=%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\WPF\"\r\n")
-            append("echo [2/3] Compiling hardware-accelerated native BeamDrop.exe - Publisher Sajjad H0ssain...\r\n")
+            append("echo [2/3] Compiling hardware-accelerated native BeamDrop.exe - Publisher Sajjad Hossain...\r\n")
             append("\"%CSC_PATH%\" /nologo /target:winexe /optimize+ /out:\"BeamDrop.exe\" /r:System.dll /r:System.Core.dll /r:System.Xaml.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Net.Http.dll /r:\"%WPF_DIR%\\PresentationFramework.dll\" /r:\"%WPF_DIR%\\PresentationCore.dll\" /r:\"%WPF_DIR%\\WindowsBase.dll\" \"BeamDropWindows.cs\"\r\n")
             append("if not exist \"BeamDrop.exe\" goto :ERR\r\n")
             append("echo [3/3] Launching BeamDrop.exe...\r\n")
@@ -454,13 +454,13 @@ class WebShareServer(
     <div class="card" style="border-color: rgba(0, 245, 212, 0.45); background: linear-gradient(135deg, rgba(20,27,45,0.92), rgba(29,39,64,0.88));">
       <div class="card-title" style="color: var(--accent);">
         <span>💻 Standalone Signed Windows Installer (.MSI) & Desktop Client</span>
-        <span style="font-size: 11px; color: var(--amber);">Publisher: Sajjad H0ssain • v2.4.0.0</span>
+        <span style="font-size: 11px; color: var(--amber);">Publisher: Sajjad Hossain • v2.4.0.0</span>
       </div>
       <p style="color: var(--text-sec); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        Official standalone Windows desktop version published by <b>Sajjad H0ssain</b>. Features native P2P discovery (TCP 8988 + UDP 8989 + mDNS), 60 FPS glowing fluid aura ripple + Cubic Bezier Aura Path payload migration, and a self-dismissing progress indicator that clears transferred files immediately upon completion.
+        Official standalone Windows desktop version published by <b>Sajjad Hossain</b>. Features native P2P discovery (TCP 8988 + UDP 8989 + mDNS), 60 FPS glowing fluid aura ripple + Cubic Bezier Aura Path payload migration, and a self-dismissing progress indicator that clears transferred files immediately upon completion.
       </p>
       <div style="background: rgba(0,245,212,0.06); border: 1px solid rgba(0,245,212,0.22); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: var(--text-sec); line-height: 1.45;">
-        <b style="color: var(--accent);">🛡️ Crash-Proof 1-Click Setup:</b> Extract the ZIP and double-click <code style="color: var(--accent);">Package_BeamDropmsi.bat</code> (or <code style="color: var(--accent);">Package-BeamDropMsi.bat</code>). It automatically unblocks Windows Zone.Identifier tags, installs to <code style="color: var(--accent);">%LOCALAPPDATA%\Programs\Sajjad H0ssain\BeamDrop\BeamDrop.exe</code>, creates a Desktop shortcut, and launches the app!
+        <b style="color: var(--accent);">🛡️ Crash-Proof 1-Click Setup:</b> Extract the ZIP and double-click <code style="color: var(--accent);">Package_BeamDropmsi.bat</code> (or <code style="color: var(--accent);">Package-BeamDropMsi.bat</code>). It automatically unblocks Windows Zone.Identifier tags, installs to <code style="color: var(--accent);">%LOCALAPPDATA%\Programs\Sajjad Hossain\BeamDrop\BeamDrop.exe</code>, creates a Desktop shortcut, and launches the app!
       </div>
       <div style="display: flex; gap: 12px; flex-wrap: wrap;">
         <a class="btn aura-ripple-btn" style="background: linear-gradient(135deg, #00F5D4, #9D4EDD); color: #090D14;" href="/download-windows-package">

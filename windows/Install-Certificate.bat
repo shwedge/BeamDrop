@@ -1,23 +1,24 @@
 @echo off
 setlocal EnableDelayedExpansion
-title BeamDrop Continuity — Register Trusted Publisher: Sajjad H0ssain
+title BeamDrop Continuity - Register Trusted Publisher: Sajjad Hossain
 echo ============================================================================
-echo   BeamDrop Continuity — Authenticode Digital Certificate Installer
-echo   Publisher: Sajjad H0ssain
+echo   BeamDrop Continuity - Authenticode Digital Certificate Installer
+echo   Publisher: Sajjad Hossain [sajjadhossain1508@gmail.com]
 echo ============================================================================
 echo.
-echo Installing Sajjad H0ssain Authenticode Code Signing Certificate...
-echo This registers publisher "Sajjad H0ssain" in your Windows Certificate Store
+echo Installing Sajjad Hossain Authenticode Code Signing Certificate...
+echo This registers publisher "Sajjad Hossain" in your Windows Certificate Store
 echo so that Windows Defender, SmartScreen, and Windows 10/11 verify BeamDrop
 echo as a trusted, authentic application.
 echo.
 
 cd /d "%~dp0"
-set CER_FILE=%~dp0SajjadH0ssain_CodeSigning.cer
+set CER_FILE=%~dp0SajjadHossain_CodeSigning.cer
+if not exist "%CER_FILE%" set CER_FILE=%~dp0SajjadH0ssain_CodeSigning.cer
 
 if not exist "%CER_FILE%" (
-    echo [ERROR] Could not find "%CER_FILE%".
-    echo Please ensure SajjadH0ssain_CodeSigning.cer is in the same directory.
+    echo [ERROR] Could not find certificate file.
+    echo Please ensure SajjadHossain_CodeSigning.cer is in this folder.
     pause
     exit /b 1
 )
@@ -38,7 +39,7 @@ if %errorLevel% neq 0 (
 
 echo.
 echo ============================================================================
-echo   [SUCCESS] Publisher "Sajjad H0ssain" is now officially trusted!
+echo   [SUCCESS] Publisher "Sajjad Hossain" is now officially trusted!
 echo   Windows Defender and SmartScreen will recognize all signed BeamDrop
 echo   installers (.MSI) and executables (.EXE) as verified and authentic.
 echo ============================================================================

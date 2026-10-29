@@ -24,12 +24,12 @@ using Path = System.IO.Path;
 using SystemPath = System.Windows.Shapes.Path;
 
 [assembly: AssemblyTitle("BeamDrop — Universal Continuity & P2P File Sharing")]
-[assembly: AssemblyDescription("Official BeamDrop Continuity Desktop Application for Windows 10/11 — Published by Sajjad H0ssain")]
+[assembly: AssemblyDescription("Official BeamDrop Continuity Desktop Application for Windows 10/11 — Published by Sajjad Hossain")]
 [assembly: AssemblyConfiguration("Release")]
-[assembly: AssemblyCompany("Sajjad H0ssain")]
+[assembly: AssemblyCompany("Sajjad Hossain")]
 [assembly: AssemblyProduct("BeamDrop Continuity")]
-[assembly: AssemblyCopyright("Copyright © 2026 Sajjad H0ssain. All rights reserved.")]
-[assembly: AssemblyTrademark("Sajjad H0ssain")]
+[assembly: AssemblyCopyright("Copyright © 2026 Sajjad Hossain. All rights reserved.")]
+[assembly: AssemblyTrademark("Sajjad Hossain")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("8F9C4B2A-5E1D-4C7A-9B3E-2D6F8A1C5E7B")]
@@ -207,6 +207,15 @@ namespace BeamDropWindows
             _deviceId = "win_" + Math.Abs((_deviceName + "_" + _localIp).GetHashCode() % 1000000);
 
             Title = "BeamDrop";
+            try
+            {
+                string icoFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BeamDrop.ico");
+                if (File.Exists(icoFile))
+                {
+                    Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(icoFile, UriKind.Absolute));
+                }
+            }
+            catch {}
             Width = 1040;
             Height = 680;
             MinWidth = 820;
@@ -241,15 +250,85 @@ namespace BeamDropWindows
             };
 
             var sideStack = new StackPanel();
+
+            // Brand Header with Android-style glowing gradient logo badge
+            var brandHeader = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(6, 0, 0, 28),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var logoBadge = new Border
+            {
+                Width = 38,
+                Height = 38,
+                CornerRadius = new CornerRadius(11),
+                Background = new LinearGradientBrush(
+                    Color.FromRgb(0, 245, 212),
+                    Color.FromRgb(157, 78, 221),
+                    45.0
+                ),
+                Effect = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(0, 245, 212),
+                    BlurRadius = 14,
+                    ShadowDepth = 0,
+                    Opacity = 0.55
+                }
+            };
+
+            var emblemCanvas = new Canvas
+            {
+                Width = 22,
+                Height = 22,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var dropPath = new SystemPath
+            {
+                Data = Geometry.Parse("M11,2 C7.5,7 5,10.5 5,14.5 C5,17.8 7.7,20.5 11,20.5 C14.3,20.5 17,17.8 17,14.5 C17,10.5 14.5,7 11,2 Z"),
+                Fill = new SolidColorBrush(Color.FromRgb(9, 13, 20)),
+                Width = 22,
+                Height = 22
+            };
+            var sparkPath = new SystemPath
+            {
+                Data = Geometry.Parse("M11,11 C9.8,11 9,11.8 9,13 C9,14.8 11,17 11,17 C11,17 13,14.8 13,13 C13,11.8 12.2,11 11,11 Z"),
+                Fill = Brushes.White,
+                Width = 22,
+                Height = 22
+            };
+            emblemCanvas.Children.Add(dropPath);
+            emblemCanvas.Children.Add(sparkPath);
+            logoBadge.Child = emblemCanvas;
+
+            brandHeader.Children.Add(logoBadge);
+
+            var titleCol = new StackPanel
+            {
+                Margin = new Thickness(10, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
             var brandText = new TextBlock
             {
                 Text = "BeamDrop",
-                FontSize = 26,
+                FontSize = 20,
                 FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(TextPrimary),
-                Margin = new Thickness(12, 0, 0, 32)
+                Foreground = new SolidColorBrush(TextPrimary)
             };
-            sideStack.Children.Add(brandText);
+            var subText = new TextBlock
+            {
+                Text = "Continuity",
+                FontSize = 10.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0, 245, 212))
+            };
+            titleCol.Children.Add(brandText);
+            titleCol.Children.Add(subText);
+            brandHeader.Children.Add(titleCol);
+
+            sideStack.Children.Add(brandHeader);
 
             _navReceiveBtn = CreateNavButton("Receive", "📡", 0);
             _navSendBtn = CreateNavButton("Send", "➤", 1);
@@ -261,10 +340,10 @@ namespace BeamDropWindows
 
             sideStack.Children.Add(new TextBlock
             {
-                Text = "Published by Sajjad H0ssain\nv2.4.0 • Verified Windows App",
+                Text = "Published by Sajjad Hossain\nv2.4.0 • Verified Windows App",
                 FontSize = 10.5,
                 Foreground = new SolidColorBrush(TextSecondary),
-                Margin = new Thickness(12, 28, 0, 0)
+                Margin = new Thickness(8, 28, 0, 0)
             });
 
             sidebar.Child = sideStack;
@@ -665,7 +744,7 @@ namespace BeamDropWindows
             // Publisher & Application Authenticity Card
             StackPanel pubRows;
             var pubCard = CreateSettingsSectionCard("Publisher & Application Identity", out pubRows);
-            AddSettingsBadgeRow(pubRows, "Publisher", "Sajjad H0ssain");
+            AddSettingsBadgeRow(pubRows, "Publisher", "Sajjad Hossain");
             AddSettingsBadgeRow(pubRows, "Product Name", "BeamDrop Continuity for Windows");
             AddSettingsBadgeRow(pubRows, "Version", "2.4.0.0 (64-bit Native WPF)");
             AddSettingsBadgeRow(pubRows, "OS Trust Status", "Verified Windows 10/11 Application Manifest");

@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="2.4.0.0" processorArchitecture="*" name="SajjadH0ssain.BeamDrop.Continuity" type="win32"/>
-  <description>BeamDrop Continuity Desktop Application - Published by Sajjad H0ssain</description>
+  <assemblyIdentity version="2.4.0.0" processorArchitecture="*" name="SajjadHossain.BeamDrop.Continuity" type="win32"/>
+  <description>BeamDrop Continuity Desktop Application - Published by Sajjad Hossain</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">

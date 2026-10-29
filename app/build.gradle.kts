@@ -145,11 +145,11 @@ dependencies {
 
 // ----------------------------------------------------------------------------
 // Dedicated Windows MSI Installer Packaging Tasks (Distinct from Android APK)
-// Publisher: Sajjad H0ssain (sajjadhossain1508@gmail.com)
+// Publisher: Sajjad Hossain (sajjadhossain1508@gmail.com)
 // ----------------------------------------------------------------------------
 tasks.register<Zip>("packageWindowsInstaller") {
   group = "distribution"
-  description = "Packages the standalone signed Windows MSI installer, Authenticode certificates, and desktop client for BeamDrop Continuity (Publisher: Sajjad H0ssain), distinct from the Android APK."
+  description = "Packages the standalone signed Windows MSI installer, Authenticode certificates, and desktop client for BeamDrop Continuity (Publisher: Sajjad Hossain), distinct from the Android APK."
 
   archiveBaseName.set("BeamDrop-Windows-Installer")
   archiveVersion.set("2.4.0.0")
@@ -166,23 +166,26 @@ tasks.register<Zip>("packageWindowsInstaller") {
   doFirst {
     println("============================================================================")
     println("  Packaging Standalone Windows MSI Installer (BeamDrop Continuity)")
-    println("  Official Publisher: Sajjad H0ssain (sajjadhossain1508@gmail.com)")
+    println("  Official Publisher: Sajjad Hossain (sajjadhossain1508@gmail.com)")
     println("  Product Version:    2.4.0.0")
     println("  Windows Package:    BeamDropInstaller.msi / Package-BeamDropMsi.bat")
-    println("  Certificates:       SajjadH0ssain_CodeSigning.cer / .pfx")
+    println("  Certificates:       SajjadHossain_CodeSigning.cer / .pfx")
     println("============================================================================")
 
     val winFolder = winDir.asFile
     val assetsFolder = assetsDir.asFile
     assetsFolder.mkdirs()
 
-    val cer = winFolder.resolve("SajjadH0ssain_CodeSigning.cer")
-    val pfx = winFolder.resolve("SajjadH0ssain_CodeSigning.pfx")
-    if (cer.exists()) {
-      cer.copyTo(assetsFolder.resolve("SajjadH0ssain_CodeSigning.cer"), overwrite = true)
-    }
-    if (pfx.exists()) {
-      pfx.copyTo(assetsFolder.resolve("SajjadH0ssain_CodeSigning.pfx"), overwrite = true)
+    listOf(
+      "SajjadHossain_CodeSigning.cer",
+      "SajjadHossain_CodeSigning.pfx",
+      "SajjadH0ssain_CodeSigning.cer",
+      "SajjadH0ssain_CodeSigning.pfx"
+    ).forEach { name ->
+      val f = winFolder.resolve(name)
+      if (f.exists()) {
+        f.copyTo(assetsFolder.resolve(name), overwrite = true)
+      }
     }
 
     listOf(
@@ -191,6 +194,7 @@ tasks.register<Zip>("packageWindowsInstaller") {
       "Install-Certificate.bat",
       "Build-BeamDropMsi.ps1",
       "BeamDropWindows.cs",
+      "BeamDrop.ico",
       "BeamDrop.exe.manifest",
       "Run-BeamDrop.bat"
     ).forEach { name ->

@@ -5,7 +5,7 @@ color 0B
 
 echo ============================================================================
 echo   BeamDrop Continuity - Push to Private GitHub Repository
-echo   Publisher: Sajjad H0ssain [sajjadhossain1508@gmail.com]
+echo   Publisher: Sajjad Hossain [sajjadhossain1508@gmail.com]
 echo ============================================================================
 echo.
 
