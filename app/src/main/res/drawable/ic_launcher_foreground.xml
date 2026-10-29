@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Top-touch ripple origin arc 1 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M38,32 C43,26 65,26 70,32"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeColor="#7B2CBF" />
+    <!-- Top-touch ripple origin arc 2 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M32,38 C40,29 68,29 76,38"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeColor="#9D4EDD" />
+    <!-- Top-touch primary ripple arc 3 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M26,45 C38,33 70,33 82,45"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeColor="#00F5D4" />
+    <!-- Central Beam Beacon Drop -->
+    <path android:pathData="M54,44 C46,55 42,62 42,70 C42,76.6 47.4,82 54,82 C60.6,82 66,76.6 66,70 C66,62 62,55 54,44 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="44"
+                android:endX="54"
+                android:endY="82"
+                android:type="linear">
+                <item android:color="#00F5D4" android:offset="0.0" />
+                <item android:color="#00BBF9" android:offset="0.6" />
+                <item android:color="#7B2CBF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Center energy core spark -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,62 C51.8,62 50,63.8 50,66 C50,69.5 54,74 54,74 C54,74 58,69.5 58,66 C58,63.8 56.2,62 54,62 Z" />
+</vector>
