@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,17 +25,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallReceived
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -49,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -60,7 +65,6 @@ import com.example.data.model.TransferRecord
 import com.example.model.SharableItem
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.CardNavy
-import com.example.ui.theme.CoralRed
 import com.example.ui.theme.CyberBlack
 import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.NeonTeal
@@ -74,13 +78,17 @@ import java.util.Date
 import java.util.Locale
 
 enum class HistoryFilter(val label: String, val tag: String) {
-    ALL("All Logs", "history_filter_all"),
-    COMPLETED("Success", "history_filter_completed"),
-    FAILED("Failed / Cancelled", "history_filter_failed"),
+    ALL("All Files", "history_filter_all"),
+    COMPLETED("Completed", "history_filter_completed"),
+    FAILED("Other", "history_filter_failed"),
     SENT("Sent", "history_filter_sent"),
     RECEIVED("Received", "history_filter_received")
 }
 
+/**
+ * Pure History Gallery showcasing transferred files and media items.
+ * Removes all developer log traces, technical error traces, and diagnostic readouts.
+ */
 @Composable
 fun TransferHistoryView(
     transfers: List<TransferRecord>,
@@ -95,10 +103,6 @@ fun TransferHistoryView(
     var selectedFilter by remember { mutableStateOf(HistoryFilter.ALL) }
     var searchQuery by remember { mutableStateOf("") }
 
-    val completedCount = transfers.count { it.isSuccess }
-    val failedCount = transfers.count { it.isFailed || it.isCancelled }
-    val peakSpeedMbps = transfers.maxOfOrNull { it.transferRateMbps } ?: 0f
-
     val filteredTransfers = remember(transfers, selectedFilter, searchQuery) {
         transfers.filter { record ->
             val matchesFilter = when (selectedFilter) {
@@ -112,8 +116,7 @@ fun TransferHistoryView(
                 true
             } else {
                 record.fileName.contains(searchQuery, ignoreCase = true) ||
-                    record.peerDeviceName.contains(searchQuery, ignoreCase = true) ||
-                    record.status.contains(searchQuery, ignoreCase = true)
+                    record.peerDeviceName.contains(searchQuery, ignoreCase = true)
             }
             matchesFilter && matchesQuery
         }
@@ -122,68 +125,68 @@ fun TransferHistoryView(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
             .testTag("transfer_history_screen")
     ) {
-        // Summary Metrics Dashboard Header
+        // 1. Elegant Header Banner (Total Transferred Files & Storage)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
-                .background(SurfaceElevated)
-                .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
-                .padding(vertical = 14.dp, horizontal = 10.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .background(CardNavy)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.horizontalGradient(listOf(ElectricCyan.copy(alpha = 0.5f), RadiantPurple.copy(alpha = 0.4f))),
+                    shape = RoundedCornerShape(20.dp)
+                )
+                .padding(vertical = 16.dp, horizontal = 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            MetricColumn(
-                label = "Total Logs",
-                value = transfers.size.toString(),
-                valueColor = TextPrimary
-            )
+            Column {
+                Text(
+                    text = "Transferred Files",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "${transfers.size} items • ${SharableItem.formatFileSize(totalBytesTransferred)} total",
+                    fontSize = 12.sp,
+                    color = ElectricCyan,
+                    fontWeight = FontWeight.Medium
+                )
+            }
 
-            VerticalDividerBar()
-
-            MetricColumn(
-                label = "Success / Fail",
-                value = "$completedCount / $failedCount",
-                valueColor = if (failedCount == 0) NeonTeal else SolarAmber
-            )
-
-            VerticalDividerBar()
-
-            MetricColumn(
-                label = "Data Beamed",
-                value = SharableItem.formatFileSize(totalBytesTransferred),
-                valueColor = ElectricCyan
-            )
-
-            VerticalDividerBar()
-
-            MetricColumn(
-                label = "Peak Speed",
-                value = if (peakSpeedMbps > 0f) String.format(Locale.US, "%.1f MB/s", peakSpeedMbps) else "0.0 MB/s",
-                valueColor = SolarAmber
-            )
+            if (transfers.isNotEmpty()) {
+                IconButton(
+                    onClick = onClearAll,
+                    modifier = Modifier.testTag("clear_all_history_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Clear All",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Search Input Bar
+        // 2. Search Bar for File Names
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             placeholder = {
-                Text(
-                    text = "Search file names, devices, or status...",
-                    fontSize = 12.sp,
-                    color = TextSecondary
-                )
+                Text(text = "Search photos, videos, documents...", fontSize = 12.sp, color = TextSecondary)
             },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Search,
-                    contentDescription = "Search transfer history",
+                    contentDescription = "Search",
                     tint = ElectricCyan,
                     modifier = Modifier.size(18.dp)
                 )
@@ -218,7 +221,7 @@ fun TransferHistoryView(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Filter Chips Row
+        // 3. Clean Filter Chips (All Files | Received | Sent)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -230,14 +233,15 @@ fun TransferHistoryView(
                 val isSelected = selectedFilter == filter
                 val count = when (filter) {
                     HistoryFilter.ALL -> transfers.size
-                    HistoryFilter.COMPLETED -> completedCount
-                    HistoryFilter.FAILED -> failedCount
+                    HistoryFilter.COMPLETED -> transfers.count { it.isSuccess }
+                    HistoryFilter.FAILED -> transfers.count { it.isFailed || it.isCancelled }
                     HistoryFilter.SENT -> transfers.count { it.direction.equals("SENT", ignoreCase = true) }
                     HistoryFilter.RECEIVED -> transfers.count { it.direction.equals("RECEIVED", ignoreCase = true) }
                 }
+
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(RoundedCornerShape(18.dp))
                         .background(
                             if (isSelected) ElectricCyan.copy(alpha = 0.18f)
                             else CardNavy
@@ -245,15 +249,16 @@ fun TransferHistoryView(
                         .border(
                             width = 1.dp,
                             color = if (isSelected) ElectricCyan else BorderSubtle,
-                            shape = RoundedCornerShape(20.dp)
+                            shape = RoundedCornerShape(18.dp)
                         )
                         .clickable { selectedFilter = filter }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .testTag(filter.tag)
+                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                        .testTag(filter.tag),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "${filter.label} ($count)",
-                        fontSize = 11.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) ElectricCyan else TextSecondary
                     )
@@ -261,80 +266,54 @@ fun TransferHistoryView(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // History list header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "TRANSFER AUDIT LOG (${filteredTransfers.size})",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextSecondary,
-                letterSpacing = 1.sp
-            )
-
-            if (transfers.isNotEmpty()) {
-                TextButton(
-                    onClick = onClearAll,
-                    modifier = Modifier.testTag("clear_history_btn")
-                ) {
-                    Text(
-                        text = "Clear All Logs",
-                        fontSize = 12.sp,
-                        color = CoralRed,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
+        // 4. File Elements List
         if (filteredTransfers.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                    .fillMaxSize()
+                    .padding(bottom = 80.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.History,
-                        contentDescription = null,
-                        tint = TextSecondary.copy(alpha = 0.5f),
-                        modifier = Modifier.size(52.dp)
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(CardNavy),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            tint = ElectricCyan.copy(alpha = 0.5f),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                     Text(
-                        text = if (transfers.isEmpty()) "No transfer logs recorded yet" else "No matching transfer logs",
+                        text = "No files transferred yet",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (transfers.isEmpty()) {
-                            "Past uploads, downloads, timestamps, and success/failure statuses will appear here automatically."
-                        } else {
-                            "Try switching the status filter or clearing your search query."
-                        },
+                        text = "Transferred photos, 4K videos, documents, and files will appear here.",
                         fontSize = 12.sp,
                         color = TextSecondary,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 24.dp)
+                        modifier = Modifier.padding(horizontal = 32.dp)
                     )
                 }
             }
         } else {
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("history_list")
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 90.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(filteredTransfers, key = { it.id }) { record ->
                     HistoryRecordRow(
@@ -350,38 +329,9 @@ fun TransferHistoryView(
     }
 }
 
-@Composable
-private fun MetricColumn(
-    label: String,
-    value: String,
-    valueColor: Color
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            color = TextSecondary
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = value,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = valueColor
-        )
-    }
-}
-
-@Composable
-private fun VerticalDividerBar() {
-    Box(
-        modifier = Modifier
-            .height(28.dp)
-            .width(1.dp)
-            .background(BorderSubtle)
-    )
-}
-
+/**
+ * Pure File Document / Media Item Card in History.
+ */
 @Composable
 fun HistoryRecordRow(
     record: TransferRecord,
@@ -391,255 +341,158 @@ fun HistoryRecordRow(
     onDelete: () -> Unit
 ) {
     val isSent = record.direction.equals("SENT", ignoreCase = true)
-    val timeFormat = remember { SimpleDateFormat("MMM d, yyyy • hh:mm:ss a", Locale.getDefault()) }
-    val dateString = timeFormat.format(Date(record.timestamp))
     val relativeTime = formatRelativeTime(record.timestamp)
 
-    val (statusLabel, statusColor, statusIcon) = when {
-        record.isSuccess -> Triple("SUCCESS", NeonTeal, Icons.Default.CheckCircle)
-        record.isCancelled -> Triple("CANCELLED", SolarAmber, Icons.Default.Cancel)
-        else -> Triple("FAILED", CoralRed, Icons.Default.ErrorOutline)
+    val lowerName = record.fileName.lowercase()
+    val (fileIcon, iconBg, iconColor) = when {
+        lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".png") || lowerName.endsWith(".webp") || record.fileType == "PHOTOS" ->
+            Triple(Icons.Default.Image, ElectricCyan.copy(alpha = 0.16f), ElectricCyan)
+        lowerName.endsWith(".mp4") || lowerName.endsWith(".mov") || lowerName.endsWith(".mkv") || record.fileType == "VIDEOS" ->
+            Triple(Icons.Default.PlayArrow, RadiantPurple.copy(alpha = 0.18f), RadiantPurple)
+        lowerName.endsWith(".mp3") || lowerName.endsWith(".wav") || lowerName.endsWith(".m4a") || record.fileType == "AUDIO" ->
+            Triple(Icons.Default.GraphicEq, SolarAmber.copy(alpha = 0.18f), SolarAmber)
+        lowerName.endsWith(".apk") || record.fileType == "APPS" ->
+            Triple(Icons.Default.Widgets, NeonTeal.copy(alpha = 0.18f), NeonTeal)
+        else ->
+            Triple(Icons.Default.Description, Color(0xFF38BDF8).copy(alpha = 0.18f), Color(0xFF38BDF8))
     }
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(CardNavy)
-            .border(
-                width = 1.dp,
-                color = when {
-                    record.isFailed -> CoralRed.copy(alpha = 0.4f)
-                    record.isCancelled -> SolarAmber.copy(alpha = 0.35f)
-                    else -> BorderSubtle
-                },
-                shape = RoundedCornerShape(16.dp)
-            )
-            .padding(14.dp)
+            .border(width = 1.dp, color = BorderSubtle, shape = RoundedCornerShape(18.dp))
+            .clickable { onOpen() }
+            .padding(horizontal = 14.dp, vertical = 13.dp)
             .animateContentSize()
-            .testTag("history_row_${record.id}")
+            .testTag("history_row_${record.id}"),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+            // File type thumbnail icon
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
             ) {
-                // Direction badge circle
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                record.isFailed -> CoralRed.copy(alpha = 0.15f)
-                                isSent -> RadiantPurple.copy(alpha = 0.15f)
-                                else -> ElectricCyan.copy(alpha = 0.15f)
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isSent) Icons.Default.CallMade else Icons.Default.CallReceived,
-                        contentDescription = if (isSent) "Sent transfer" else "Received transfer",
-                        tint = when {
-                            record.isFailed -> CoralRed
-                            isSent -> RadiantPurple
-                            else -> ElectricCyan
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = record.fileName,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-
-                        // Status Pill Badge
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(statusColor.copy(alpha = 0.15f))
-                                .border(0.8.dp, statusColor.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 7.dp, vertical = 2.dp)
-                                .testTag("history_status_${record.id}"),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = statusIcon,
-                                contentDescription = statusLabel,
-                                tint = statusColor,
-                                modifier = Modifier.size(11.dp)
-                            )
-                            Text(
-                                text = statusLabel,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = statusColor
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Peer & File Metadata Row
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (isSent) "To ${record.peerDeviceName}" else "From ${record.peerDeviceName}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = TextSecondary
-                        )
-                        Text(text = " • ", fontSize = 11.sp, color = TextSecondary)
-                        Text(
-                            text = SharableItem.formatFileSize(record.fileSize),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = ElectricCyan
-                        )
-                        if (record.transferRateMbps > 0f && record.isSuccess) {
-                            Text(text = " • ", fontSize = 11.sp, color = TextSecondary)
-                            Text(
-                                text = String.format(Locale.US, "%.1f MB/s", record.transferRateMbps),
-                                fontSize = 11.sp,
-                                color = NeonTeal
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Timestamp Row
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Schedule,
-                            contentDescription = "Timestamp",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "$dateString ($relativeTime)",
-                            fontSize = 10.sp,
-                            color = TextSecondary
-                        )
-                    }
-                }
+                Icon(
+                    imageVector = fileIcon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(22.dp)
+                )
             }
 
-            // Action Buttons
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (record.isFailed || record.isCancelled) {
-                    IconButton(
-                        onClick = onRetry,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .testTag("history_retry_${record.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Replay,
-                            contentDescription = "Retry transfer",
-                            tint = SolarAmber,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+            Spacer(modifier = Modifier.width(12.dp))
 
-                if (record.isSuccess && !record.localUri.isNullOrEmpty()) {
-                    IconButton(
-                        onClick = onOpen,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .testTag("history_open_${record.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderOpen,
-                            contentDescription = "Open file",
-                            tint = ElectricCyan,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = record.fileName,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-                    IconButton(
-                        onClick = onShare,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .testTag("history_share_${record.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share file",
-                            tint = NeonTeal,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(3.dp))
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .testTag("history_delete_${record.id}")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Delete log entry",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(17.dp)
+                    Text(
+                        text = if (isSent) "Sent to ${record.peerDeviceName}" else "From ${record.peerDeviceName}",
+                        fontSize = 11.5.sp,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(text = "•", fontSize = 10.sp, color = TextSecondary)
+                    Text(
+                        text = SharableItem.formatFileSize(record.fileSize),
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ElectricCyan
+                    )
+                    Text(text = "•", fontSize = 10.sp, color = TextSecondary)
+                    Text(
+                        text = relativeTime,
+                        fontSize = 11.sp,
+                        color = TextSecondary
                     )
                 }
             }
         }
 
-        // Error or Cancellation detail banner if present
-        if (!record.errorMessage.isNullOrBlank() && (record.isFailed || record.isCancelled)) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Open & Share actions
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = onOpen,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(CyberBlack)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .size(34.dp)
+                    .testTag("open_file_${record.id}")
             ) {
-                Text(
-                    text = "Reason: ${record.errorMessage}",
-                    fontSize = 11.sp,
-                    color = if (record.isFailed) CoralRed else SolarAmber,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                Icon(
+                    imageVector = Icons.Default.OpenInNew,
+                    contentDescription = "Open file",
+                    tint = ElectricCyan,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onShare,
+                modifier = Modifier
+                    .size(34.dp)
+                    .testTag("share_file_${record.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = "Share",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier
+                    .size(32.dp)
+                    .testTag("delete_record_${record.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = "Delete",
+                    tint = TextSecondary.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
     }
 }
 
-private fun formatRelativeTime(timestampMs: Long): String {
-    val diffMs = (System.currentTimeMillis() - timestampMs).coerceAtLeast(0L)
-    val seconds = diffMs / 1000L
+private fun formatRelativeTime(timestamp: Long): String {
+    val diffMs = System.currentTimeMillis() - timestamp
+    val seconds = diffMs / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    val days = hours / 24
+
     return when {
-        seconds < 45 -> "Just now"
-        seconds < 3600 -> "${seconds / 60}m ago"
-        seconds < 86400 -> "${seconds / 3600}h ago"
-        else -> "${seconds / 86400}d ago"
+        seconds < 60 -> "Just now"
+        minutes < 60 -> "${minutes}m ago"
+        hours < 24 -> "${hours}h ago"
+        days < 7 -> "${days}d ago"
+        else -> SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(timestamp))
     }
 }

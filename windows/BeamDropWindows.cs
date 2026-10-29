@@ -19,6 +19,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Path = System.IO.Path;
 using SystemPath = System.Windows.Shapes.Path;
@@ -177,6 +178,14 @@ namespace BeamDropWindows
         private TextBlock _transferMetricsText;
         private TextBlock _transferPercentBadge;
         private Border _transferProgressFill;
+
+        // Non-blocking Desktop Completion Toast Card
+        private Border _completionToastCard;
+        private TextBlock _toastTitleText;
+        private TextBlock _toastSubText;
+        private TextBlock _toastFileText;
+        private string _lastCompletedFilePath;
+        private DispatcherTimer _toastAutoDismissTimer;
 
         // Animation & Shared Cross-Platform Aura Path state
         private readonly Stopwatch _animClock = Stopwatch.StartNew();
@@ -356,11 +365,13 @@ namespace BeamDropWindows
             _sendView = BuildSendView();
             _settingsView = BuildSettingsView();
             _discreetTransferLayer = BuildDiscreetTransferProgressIndicator();
+            _completionToastCard = BuildCompletionToast();
 
             contentHost.Children.Add(_receiveView);
             contentHost.Children.Add(_sendView);
             contentHost.Children.Add(_settingsView);
             contentHost.Children.Add(_discreetTransferLayer);
+            contentHost.Children.Add(_completionToastCard);
 
             Grid.SetColumn(contentHost, 1);
             rootGrid.Children.Add(contentHost);
@@ -763,8 +774,7 @@ namespace BeamDropWindows
         {
             var layer = new Grid
             {
-                Visibility = Visibility.Collapsed,
-                IsHitTestVisible = false
+                Visibility = Visibility.Collapsed
             };
 
             _oneTransferCanvas = new Canvas
@@ -914,6 +924,226 @@ namespace BeamDropWindows
             layer.Children.Add(_discreetCapsuleCard);
 
             return layer;
+        }
+
+        /// <summary>
+        /// Builds the non-blocking desktop completion notification card on Windows,
+        /// providing immediate "Open File", "Open Folder", and "Dismiss" controls.
+        /// </summary>
+        private Border BuildCompletionToast()
+        {
+            var card = new Border
+            {
+                Width = 390,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 0, 24, 24),
+                CornerRadius = new CornerRadius(16),
+                Background = new SolidColorBrush(Color.FromArgb(246, 16, 28, 26)),
+                BorderBrush = new LinearGradientBrush(MintAccent, ElectricCyan, 45.0),
+                BorderThickness = new Thickness(1.4),
+                Padding = new Thickness(16, 14, 16, 14),
+                Visibility = Visibility.Collapsed,
+                Effect = new DropShadowEffect
+                {
+                    Color = MintAccent,
+                    BlurRadius = 24,
+                    ShadowDepth = 2,
+                    Opacity = 0.4
+                }
+            };
+
+            var stack = new StackPanel();
+
+            // Top header row: Checkmark badge + Title + Dismiss (✕)
+            var headerRow = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+
+            var dismissBtn = new Border
+            {
+                Width = 24,
+                Height = 24,
+                CornerRadius = new CornerRadius(12),
+                Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            dismissBtn.Child = new TextBlock
+            {
+                Text = "✕",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(TextSecondary),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            dismissBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                card.Visibility = Visibility.Collapsed;
+                if (_toastAutoDismissTimer != null) _toastAutoDismissTimer.Stop();
+            };
+            DockPanel.SetDock(dismissBtn, Dock.Right);
+            headerRow.Children.Add(dismissBtn);
+
+            var iconCircle = new Border
+            {
+                Width = 28,
+                Height = 28,
+                CornerRadius = new CornerRadius(14),
+                Background = new SolidColorBrush(Color.FromArgb(50, 94, 212, 187)),
+                Margin = new Thickness(0, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            iconCircle.Child = new TextBlock
+            {
+                Text = "✓",
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(MintAccent),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            DockPanel.SetDock(iconCircle, Dock.Left);
+            headerRow.Children.Add(iconCircle);
+
+            var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            _toastTitleText = new TextBlock
+            {
+                Text = "Transfer Completed!",
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(TextPrimary)
+            };
+            _toastSubText = new TextBlock
+            {
+                Text = "Received from HONOR Phone",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(MintAccent),
+                Margin = new Thickness(0, 2, 0, 0)
+            };
+            textStack.Children.Add(_toastTitleText);
+            textStack.Children.Add(_toastSubText);
+            headerRow.Children.Add(textStack);
+
+            stack.Children.Add(headerRow);
+
+            // File details box
+            var fileBox = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(120, 10, 22, 20)),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            _toastFileText = new TextBlock
+            {
+                Text = "file.mp4 • 45.2 MB",
+                FontSize = 12,
+                FontWeight = FontWeights.Medium,
+                Foreground = new SolidColorBrush(TextPrimary),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            fileBox.Child = _toastFileText;
+            stack.Children.Add(fileBox);
+
+            // Action buttons row: [Open File] [Open Folder]
+            var actionsRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var openFileBtn = new Border
+            {
+                Background = new SolidColorBrush(MintAccent),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(14, 6, 14, 6),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = Cursors.Hand
+            };
+            openFileBtn.Child = new TextBlock
+            {
+                Text = "Open File",
+                FontSize = 11.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(15, 23, 42))
+            };
+            openFileBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(_lastCompletedFilePath) && File.Exists(_lastCompletedFilePath))
+                    {
+                        Process.Start(new ProcessStartInfo(_lastCompletedFilePath) { UseShellExecute = true });
+                    }
+                }
+                catch { }
+            };
+            actionsRow.Children.Add(openFileBtn);
+
+            var openFolderBtn = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(14, 6, 14, 6),
+                Cursor = Cursors.Hand
+            };
+            openFolderBtn.Child = new TextBlock
+            {
+                Text = "Open Folder",
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(TextPrimary)
+            };
+            openFolderBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(_lastCompletedFilePath) && File.Exists(_lastCompletedFilePath))
+                    {
+                        Process.Start("explorer.exe", string.Format("/select,\"{0}\"", _lastCompletedFilePath));
+                    }
+                    else if (Directory.Exists(_downloadDir))
+                    {
+                        Process.Start("explorer.exe", _downloadDir);
+                    }
+                }
+                catch { }
+            };
+            actionsRow.Children.Add(openFolderBtn);
+
+            stack.Children.Add(actionsRow);
+
+            card.Child = stack;
+            return card;
+        }
+
+        private void ShowCompletionToast(string title, string peerName, string fileName, long sizeBytes, string filePath)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _lastCompletedFilePath = filePath;
+                _toastTitleText.Text = title;
+                _toastSubText.Text = !string.IsNullOrEmpty(peerName) ? peerName : "BeamDrop Transfer";
+                _toastFileText.Text = string.Format("{0} • {1}", fileName, FormatFileSize(sizeBytes));
+                _completionToastCard.Visibility = Visibility.Visible;
+
+                if (_toastAutoDismissTimer == null)
+                {
+                    _toastAutoDismissTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(9) };
+                    _toastAutoDismissTimer.Tick += (s, e) =>
+                    {
+                        _completionToastCard.Visibility = Visibility.Collapsed;
+                        _toastAutoDismissTimer.Stop();
+                    };
+                }
+                else
+                {
+                    _toastAutoDismissTimer.Stop();
+                }
+                _toastAutoDismissTimer.Start();
+            }));
         }
 
         private void OnRenderFrame(object sender, EventArgs e)
@@ -1602,6 +1832,11 @@ namespace BeamDropWindows
                 // Immediately clear staged files AND immediately self-dismiss the discreet progress indicator
                 ClearStagedSelection();
                 HideTransferOverlay();
+
+                string firstFile = files.FirstOrDefault();
+                string displayTitle = files.Count > 1 ? string.Format("{0} Files Sent!", files.Count) : "File Sent!";
+                string displayName = files.Count > 1 ? string.Format("{0} files", files.Count) : Path.GetFileName(firstFile);
+                ShowCompletionToast(displayTitle, string.Format("Delivered to {0}", peer.Name), displayName, totalBytes, firstFile);
             }
             catch (Exception ex)
             {
@@ -1925,6 +2160,8 @@ namespace BeamDropWindows
                             long totalReceived = 0;
                             var sw = Stopwatch.StartNew();
                             byte[] buffer = new byte[65536];
+                            string lastDestPath = null;
+                            string lastFileName = null;
 
                             for (int i = 0; i < fileCount; i++)
                             {
@@ -1935,6 +2172,8 @@ namespace BeamDropWindows
                                 long fileSize = fParts.Length > 2 ? long.Parse(fParts[2]) : 0L;
 
                                 string destPath = GetUniqueFilePath(_downloadDir, fileName);
+                                lastDestPath = destPath;
+                                lastFileName = fileName;
                                 long remaining = fileSize;
                                 using (var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
                                 {
@@ -1974,6 +2213,10 @@ namespace BeamDropWindows
 
                             // Immediately self-dismiss the discreet progress indicator upon completion
                             HideTransferOverlay();
+
+                            string displayTitle = fileCount > 1 ? string.Format("{0} Files Received!", fileCount) : "File Received!";
+                            string displayName = fileCount > 1 ? string.Format("{0} files ({1})", fileCount, FormatFileSize(totalBytes)) : lastFileName;
+                            ShowCompletionToast(displayTitle, string.Format("Received from {0}", senderName), displayName, totalBytes, lastDestPath);
                         }
                     }
                 }
