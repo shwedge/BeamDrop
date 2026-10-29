@@ -5,7 +5,7 @@ color 0B
 
 echo ============================================================================
 echo   BeamDrop Continuity Engine v2.4.0.0 - Native Windows MSI and App Setup
-echo   Publisher: Sajjad Hossain [sajjadhossain1508@gmail.com]
+echo   Publisher: Sajjad Hossain [sajjadtheacid@gmail.com]
 echo ============================================================================
 echo.
 
@@ -69,7 +69,7 @@ goto :COMPILE_ERROR
 
 :LAUNCH_INSTALLED
 echo   [OK] Installed at: %INSTALL_DIR%\BeamDrop.exe
-echo   [OK] Publisher: Sajjad Hossain [sajjadhossain1508@gmail.com]
+echo   [OK] Publisher: Sajjad Hossain [sajjadtheacid@gmail.com]
 start "" "%INSTALL_DIR%\BeamDrop.exe"
 echo.
 echo BeamDrop Continuity is now running!

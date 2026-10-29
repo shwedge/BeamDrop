@@ -1,6 +1,6 @@
 # ============================================================================
 #   BeamDrop Continuity - Native Windows Installer (.MSI and .EXE) Builder
-#   Publisher: Sajjad Hossain (sajjadhossain1508@gmail.com)
+#   Publisher: Sajjad Hossain (sajjadtheacid@gmail.com)
 #   Product:   BeamDrop Continuity (v2.4.0.0)
 # ============================================================================
 
@@ -185,7 +185,7 @@ try {
     Set-ItemProperty -Path $regPath -Name "DisplayName" -Value "BeamDrop Continuity" -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "DisplayVersion" -Value "2.4.0.0" -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "Publisher" -Value "Sajjad Hossain" -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path $regPath -Name "Contact" -Value "sajjadhossain1508@gmail.com" -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $regPath -Name "Contact" -Value "sajjadtheacid@gmail.com" -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "InstallLocation" -Value $installDir -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "DisplayIcon" -Value "$installedExe,0" -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "UninstallString" -Value "cmd.exe /c rmdir /s /q `"$installDir`"" -ErrorAction SilentlyContinue
@@ -224,7 +224,7 @@ try {
         @("ProductCode", $prodGuid),
         @("UpgradeCode", $upgGuid),
         @("Manufacturer", "Sajjad Hossain"),
-        @("ARPCONTACT", "sajjadhossain1508@gmail.com")
+        @("ARPCONTACT", "sajjadtheacid@gmail.com")
     )
     foreach ($p in $props) {
         $v = $db.OpenView("INSERT INTO Property (Property, Value) VALUES (?, ?)")

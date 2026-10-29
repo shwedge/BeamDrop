@@ -8,7 +8,7 @@
 ## 1. Project Identification & Version
 * **Application**: BeamDrop — Universal Fluid Peer-to-Peer File Sharing & Continuity
 * **Current Version**: v2.4.0.0
-* **Official Publisher**: Sajjad Hossain (`sajjadhossain1508@gmail.com`)
+* **Official Publisher**: Sajjad Hossain (`sajjadtheacid@gmail.com`)
 * **Supported Platforms**:
   * **Android**: Modern Jetpack Compose, NFC top-touch handshake, Wi-Fi Direct & Local Subnet TCP transfer engine (tested on HONOR, Pixel, Samsung, etc.).
   * **Windows**: Native C# WPF application (.NET 4.8 / Windows 10/11) with embedded app icon, SHA-256 Authenticode signature, and local Wi-Fi TCP/UDP server.
@@ -50,7 +50,7 @@
 
 ### 2.2 Windows Desktop App Enhancements
 1. **Official Publisher & Code Signing**:
-   * Generated SHA-256 digital certificate: `CN=Sajjad Hossain, E=sajjadhossain1508@gmail.com`.
+   * Generated SHA-256 digital certificate: `CN=Sajjad Hossain, E=sajjadtheacid@gmail.com`.
    * Signed `BeamDrop.exe` with Authenticode; verified publisher trust in Windows.
    * *Files*: `windows/SajjadHossain_CodeSigning.cer`, `windows/SajjadHossain_CodeSigning.pfx`
 
@@ -96,5 +96,5 @@
 
 ## 4. Current Git Repository Status
 * **Branch**: `main`
-* **Author / Publisher**: `Sajjad Hossain <sajjadhossain1508@gmail.com>`
+* **Author / Publisher**: `Sajjad Hossain <sajjadtheacid@gmail.com>`
 * **Status**: Clean working tree with all latest commits.

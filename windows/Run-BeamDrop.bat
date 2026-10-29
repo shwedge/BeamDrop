@@ -5,7 +5,7 @@ color 0B
 
 echo ============================================================================
 echo   BeamDrop Continuity Engine v2.4.0.0 for Windows 10 and 11
-echo   Publisher: Sajjad Hossain [sajjadhossain1508@gmail.com]
+echo   Publisher: Sajjad Hossain [sajjadtheacid@gmail.com]
 echo ============================================================================
 echo.
 

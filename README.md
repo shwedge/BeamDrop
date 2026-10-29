@@ -1,7 +1,7 @@
 # ⚡ BeamDrop Continuity
 
 > **Apple-Style Fluid Ecosystem for Android & Windows 10/11**  
-> **Official Publisher:** Sajjad Hossain (`sajjadhossain1508@gmail.com`)  
+> **Official Publisher:** Sajjad Hossain (`sajjadtheacid@gmail.com`)  
 > **Product Version:** 2.4.0.0
 
 ---
@@ -71,4 +71,4 @@ BeamDrop/
 
 ## 🛡️ License & Copyright
 
-Published & Maintained by **Sajjad Hossain** (`sajjadhossain1508@gmail.com`). All rights reserved.
+Published & Maintained by **Sajjad Hossain** (`sajjadtheacid@gmail.com`). All rights reserved.

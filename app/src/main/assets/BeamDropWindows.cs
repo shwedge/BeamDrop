@@ -756,6 +756,7 @@ namespace BeamDropWindows
             StackPanel pubRows;
             var pubCard = CreateSettingsSectionCard("Publisher & Application Identity", out pubRows);
             AddSettingsBadgeRow(pubRows, "Publisher", "Sajjad Hossain");
+            AddSettingsBadgeRow(pubRows, "Contact Email", "sajjadtheacid@gmail.com");
             AddSettingsBadgeRow(pubRows, "Product Name", "BeamDrop Continuity for Windows");
             AddSettingsBadgeRow(pubRows, "Version", "2.4.0.0 (64-bit Native WPF)");
             AddSettingsBadgeRow(pubRows, "OS Trust Status", "Verified Windows 10/11 Application Manifest");
