@@ -37,7 +37,7 @@ echo [2/3] Ensuring branch is set to main...
 git branch -M main
 
 echo [3/3] Pushing all files to your private GitHub repository...
-git push -u origin main
+git push -u origin main --force
 
 if errorlevel 1 (
     echo.
