@@ -2747,7 +2747,18 @@ namespace BeamDropWindows
             Task.Run(() => RunTcpServerLoopAsync(token), token);
             Task.Run(() => RunUdpBeaconListenerAsync(token), token);
             Task.Run(() => RunUdpBeaconBroadcasterAsync(token), token);
-            TriggerSubnetScan();
+            
+            // Immediate flurry of UDP discovery
+            BroadcastBeaconBurst();
+
+            // Run initial discovery sweep gently after UI stabilizes
+            Task.Delay(1500, token).ContinueWith(t =>
+            {
+                if (!token.IsCancellationRequested)
+                {
+                    Dispatcher.BeginInvoke(new Action(() => OnScanClicked()));
+                }
+            });
         }
 
         private async Task RunTcpServerLoopAsync(CancellationToken token)
@@ -3169,40 +3180,67 @@ namespace BeamDropWindows
             }
         }
 
+        private void UpdateScanButtonUi(bool scanning)
+        {
+            try
+            {
+                if (Dispatcher.CheckAccess())
+                {
+                    if (_scanButtonText != null) _scanButtonText.Text = scanning ? "↻ Scanning..." : "↻ Scan";
+                }
+                else
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_scanButtonText != null) _scanButtonText.Text = scanning ? "↻ Scanning..." : "↻ Scan";
+                    }));
+                }
+            }
+            catch { }
+        }
+
         private async void OnScanClicked()
         {
             if (_isScanning) return;
             _isScanning = true;
-            if (_scanButtonText != null) _scanButtonText.Text = "↻ Scanning...";
+            UpdateScanButtonUi(true);
 
             try
             {
-                // 1. Immediately prune any unresponsive known peers
-                var currentPeers = _peers.Values.ToList();
-                foreach (var peer in currentPeers)
+                await Task.Run(async () =>
                 {
-                    if ((DateTime.UtcNow - peer.LastSeen).TotalSeconds > 6.0)
+                    try
                     {
-                        bool alive = await ProbeSingleHostAsync(peer.Ip);
-                        if (!alive)
+                        // 1. Immediately prune any unresponsive known peers
+                        var currentPeers = _peers.Values.ToList();
+                        foreach (var peer in currentPeers)
                         {
-                            PeerNode removed;
-                            _peers.TryRemove(peer.Ip, out removed);
+                            if ((DateTime.UtcNow - peer.LastSeen).TotalSeconds > 6.0)
+                            {
+                                bool alive = await ProbeSingleHostAsync(peer.Ip);
+                                if (!alive)
+                                {
+                                    PeerNode removed;
+                                    _peers.TryRemove(peer.Ip, out removed);
+                                }
+                            }
                         }
+                        RefreshPeersListUi();
+
+                        // 2. Immediate flurry of UDP broadcast beacons across all local interfaces
+                        BroadcastBeaconBurst();
+
+                        // 3. Parallel TCP Subnet Scan with 750ms timeout
+                        await RunSubnetScanAsync();
                     }
-                }
-                RefreshPeersListUi();
-
-                // 2. Immediate flurry of UDP broadcast beacons across all local interfaces
-                BroadcastBeaconBurst();
-
-                // 3. Parallel TCP Subnet Scan with 750ms timeout
-                await RunSubnetScanAsync();
+                    catch { }
+                });
             }
+            catch { }
             finally
             {
                 _isScanning = false;
-                if (_scanButtonText != null) _scanButtonText.Text = "↻ Scan";
+                UpdateScanButtonUi(false);
                 RefreshPeersListUi();
             }
         }
@@ -3246,7 +3284,11 @@ namespace BeamDropWindows
                 {
                     var connectTask = client.ConnectAsync(ip, TCP_PORT);
                     var completed = await Task.WhenAny(connectTask, Task.Delay(750));
-                    if (completed != connectTask || !client.Connected) return false;
+                    if (completed != connectTask || !client.Connected)
+                    {
+                        connectTask.ContinueWith(t => { var ign = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                        return false;
+                    }
 
                     using (var stream = client.GetStream())
                     {
@@ -3767,7 +3809,41 @@ namespace BeamDropWindows
         [STAThread]
         public static void Main()
         {
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                try
+                {
+                    string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamDrop");
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    File.AppendAllText(
+                        Path.Combine(dir, "crash.log"),
+                        string.Format("[{0}] UnhandledException: {1}\n", DateTime.Now, e.ExceptionObject)
+                    );
+                }
+                catch { }
+            };
+
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                try { e.SetObserved(); } catch { }
+            };
+
             var app = new Application();
+            app.DispatcherUnhandledException += (s, e) =>
+            {
+                try
+                {
+                    string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamDrop");
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    File.AppendAllText(
+                        Path.Combine(dir, "crash.log"),
+                        string.Format("[{0}] DispatcherUnhandledException: {1}\n", DateTime.Now, e.Exception)
+                    );
+                }
+                catch { }
+                e.Handled = true; // Prevents process termination
+            };
+
             app.Run(new MainWindow());
         }
     }
