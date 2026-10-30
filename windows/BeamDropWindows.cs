@@ -315,7 +315,143 @@ namespace BeamDropWindows
         }
     }
 
-    public class MainWindow : Window
+
+    public static class ModernFolderPicker
+    {
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+        private static extern void SHCreateItemFromParsingName(
+            [MarshalAs(UnmanagedType.LPWStr)] string pszPath,
+            IntPtr pbc,
+            [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+            [Out, MarshalAs(UnmanagedType.Interface)] out IShellItem ppv);
+
+        private const uint FOS_PICKFOLDERS = 0x00000020;
+        private const uint FOS_FORCEFILESYSTEM = 0x00000040;
+        private const uint FOS_PATHMUSTEXIST = 0x00000800;
+        private const uint SIGDN_FILESYSPATH = 0x80058000;
+
+        public static string Show(Window owner, string title, string initialFolder)
+        {
+            try
+            {
+                var dialog = (IFileOpenDialog)new FileOpenDialogClass();
+                uint options;
+                dialog.GetOptions(out options);
+                options |= FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST;
+                dialog.SetOptions(options);
+
+                if (!string.IsNullOrEmpty(title))
+                {
+                    dialog.SetTitle(title);
+                }
+
+                if (!string.IsNullOrEmpty(initialFolder) && Directory.Exists(initialFolder))
+                {
+                    try
+                    {
+                        IShellItem item;
+                        Guid guid = typeof(IShellItem).GUID;
+                        SHCreateItemFromParsingName(initialFolder, IntPtr.Zero, guid, out item);
+                        if (item != null)
+                        {
+                            dialog.SetFolder(item);
+                            dialog.SetDefaultFolder(item);
+                        }
+                    }
+                    catch { }
+                }
+
+                IntPtr hwnd = owner != null ? new WindowInteropHelper(owner).Handle : IntPtr.Zero;
+                int hr = dialog.Show(hwnd);
+                if (hr == 0) // S_OK
+                {
+                    IShellItem resultItem;
+                    dialog.GetResult(out resultItem);
+                    if (resultItem != null)
+                    {
+                        string path;
+                        resultItem.GetDisplayName(SIGDN_FILESYSPATH, out path);
+                        return path;
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback to WinForms if COM fails
+                try
+                {
+                    var fb = new System.Windows.Forms.FolderBrowserDialog
+                    {
+                        Description = title,
+                        SelectedPath = initialFolder,
+                        ShowNewFolderButton = true
+                    };
+                    if (fb.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                    {
+                        return fb.SelectedPath;
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        [ComImport]
+        [Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
+        [CoClass(typeof(FileOpenDialogClass))]
+        private interface NativeFileOpenDialog : IFileOpenDialog { }
+
+        [ComImport]
+        [Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
+        private class FileOpenDialogClass { }
+
+        [ComImport]
+        [Guid("42f85136-db7e-439c-85f1-e4075d135fc8")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IFileOpenDialog
+        {
+            [PreserveSig] int Show(IntPtr parent);
+            void SetFileTypes();
+            void SetFileTypeIndex();
+            void GetFileTypeIndex();
+            void Advise();
+            void Unadvise();
+            void SetOptions(uint fos);
+            void GetOptions(out uint fos);
+            void SetDefaultFolder(IShellItem psi);
+            void SetFolder(IShellItem psi);
+            void GetFolder(out IShellItem ppsi);
+            void GetCurrentSelection(out IShellItem ppsi);
+            void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+            void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string pszName);
+            void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string pszTitle);
+            void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string pszText);
+            void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string pszLabel);
+            void GetResult(out IShellItem ppsi);
+            void AddPlace(IShellItem psi, int fdap);
+            void SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string pszDefaultExtension);
+            void Close(int hr);
+            void SetClientGuid();
+            void ClearClientData();
+            void SetFilter();
+            void GetResults();
+            void GetSelectedItems();
+        }
+
+        [ComImport]
+        [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IShellItem
+        {
+            void BindToHandler();
+            void GetParent();
+            void GetDisplayName(uint sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
+            void GetAttributes();
+            void Compare();
+        }
+    }
+
+        public class MainWindow : Window
     {
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
@@ -3618,15 +3754,10 @@ namespace BeamDropWindows
             {
                 try
                 {
-                    var dlg = new System.Windows.Forms.FolderBrowserDialog
+                    string selected = ModernFolderPicker.Show(this, "Select destination folder for received files (Any Drive / Folder)", _downloadDir);
+                    if (!string.IsNullOrEmpty(selected) && Directory.Exists(selected))
                     {
-                        Description = "Select destination folder for received files",
-                        SelectedPath = _downloadDir,
-                        ShowNewFolderButton = true
-                    };
-                    if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK && !string.IsNullOrEmpty(dlg.SelectedPath))
-                    {
-                        _downloadDir = dlg.SelectedPath;
+                        _downloadDir = selected;
                         _settings.DownloadDir = _downloadDir;
                         _settings.Save();
                         pathLabel.Text = _downloadDir;
