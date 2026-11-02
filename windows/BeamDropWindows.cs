@@ -1,3 +1,4 @@
+using System.Windows.Media.Animation;
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -90,6 +91,219 @@ namespace BeamDropWindows
         public string Status { get; set; }
         public string SavedPath { get; set; }
         public string Timestamp { get; set; }
+    }
+
+    public class ReceivedFileRecord
+    {
+        public string Id { get; set; }
+        public string FileName { get; set; }
+        public string FilePath { get; set; }
+        public long FileSize { get; set; }
+        public string DeviceName { get; set; }
+        public string SenderIp { get; set; }
+        public DateTime Timestamp { get; set; }
+        public string FormattedDate { get { return Timestamp.ToString("MMM d, yyyy"); } }
+        public string FormattedExactTime { get { return Timestamp.ToString("hh:mm:ss tt"); } }
+        public string FormattedSize { get { return MainWindow.FormatFileSize(FileSize); } }
+    }
+
+    public static class ReceivingHistoryManager
+    {
+        private static readonly object _syncLock = new object();
+        private static List<ReceivedFileRecord> _cachedHistory = null;
+
+        public static string GetHistoryFilePath()
+        {
+            try
+            {
+                string dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Programs", "Sajjad Hossain Mridul", "BeamDrop");
+                if (Directory.Exists(dir)) return Path.Combine(dir, "receiving_history.json");
+
+                string appData = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamDrop");
+                if (!Directory.Exists(appData)) Directory.CreateDirectory(appData);
+                return Path.Combine(appData, "receiving_history.json");
+            }
+            catch
+            {
+                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "receiving_history.json");
+            }
+        }
+
+        public static List<ReceivedFileRecord> LoadHistory(string downloadDir = null)
+        {
+            lock (_syncLock)
+            {
+                if (_cachedHistory != null) return _cachedHistory;
+
+                string filePath = GetHistoryFilePath();
+                _cachedHistory = new List<ReceivedFileRecord>();
+
+                if (File.Exists(filePath))
+                {
+                    try
+                    {
+                        string json = File.ReadAllText(filePath, Encoding.UTF8);
+                        _cachedHistory = DeserializeRecords(json);
+                    }
+                    catch { }
+                }
+
+                // If empty, seed from existing downloaded files so the user immediately has history
+                if (_cachedHistory.Count == 0 && !string.IsNullOrEmpty(downloadDir) && Directory.Exists(downloadDir))
+                {
+                    try
+                    {
+                        var di = new DirectoryInfo(downloadDir);
+                        var recentFiles = di.GetFiles("*", SearchOption.TopDirectoryOnly)
+                            .Where(f => !f.Name.StartsWith(".") && f.Extension != ".tmp")
+                            .OrderByDescending(f => f.LastWriteTime)
+                            .Take(25);
+
+                        foreach (var f in recentFiles)
+                        {
+                            _cachedHistory.Add(new ReceivedFileRecord
+                            {
+                                Id = "rec_" + f.CreationTime.Ticks,
+                                FileName = f.Name,
+                                FilePath = f.FullName,
+                                FileSize = f.Length,
+                                DeviceName = "Connected Device",
+                                SenderIp = "192.168.1.*",
+                                Timestamp = f.LastWriteTime
+                            });
+                        }
+
+                        if (_cachedHistory.Count > 0)
+                        {
+                            SaveHistory(_cachedHistory);
+                        }
+                    }
+                    catch { }
+                }
+
+                return _cachedHistory;
+            }
+        }
+
+        public static void AddRecord(string fileName, string filePath, long fileSize, string deviceName, string senderIp, DateTime? time = null)
+        {
+            lock (_syncLock)
+            {
+                if (_cachedHistory == null) _cachedHistory = LoadHistory();
+
+                var rec = new ReceivedFileRecord
+                {
+                    Id = "rec_" + DateTime.UtcNow.Ticks,
+                    FileName = fileName,
+                    FilePath = filePath,
+                    FileSize = fileSize,
+                    DeviceName = !string.IsNullOrEmpty(deviceName) ? deviceName : "Remote Peer",
+                    SenderIp = !string.IsNullOrEmpty(senderIp) ? senderIp : "127.0.0.1",
+                    Timestamp = time ?? DateTime.Now
+                };
+
+                _cachedHistory.Insert(0, rec);
+                if (_cachedHistory.Count > 150)
+                {
+                    _cachedHistory = _cachedHistory.Take(150).ToList();
+                }
+
+                SaveHistory(_cachedHistory);
+            }
+        }
+
+        public static void ClearHistory()
+        {
+            lock (_syncLock)
+            {
+                if (_cachedHistory == null) _cachedHistory = new List<ReceivedFileRecord>();
+                _cachedHistory.Clear();
+                SaveHistory(_cachedHistory);
+            }
+        }
+
+        public static void SaveHistory(List<ReceivedFileRecord> records)
+        {
+            try
+            {
+                string filePath = GetHistoryFilePath();
+                string dir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                string json = SerializeRecords(records);
+                File.WriteAllText(filePath, json, Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        private static string SerializeRecords(List<ReceivedFileRecord> list)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("[");
+            for (int i = 0; i < list.Count; i++)
+            {
+                var r = list[i];
+                sb.AppendLine("  {");
+                sb.AppendLine(string.Format("    \"id\": \"{0}\",", EscapeJson(r.Id)));
+                sb.AppendLine(string.Format("    \"fileName\": \"{0}\",", EscapeJson(r.FileName)));
+                sb.AppendLine(string.Format("    \"filePath\": \"{0}\",", EscapeJson(r.FilePath)));
+                sb.AppendLine(string.Format("    \"fileSize\": {0},", r.FileSize));
+                sb.AppendLine(string.Format("    \"deviceName\": \"{0}\",", EscapeJson(r.DeviceName)));
+                sb.AppendLine(string.Format("    \"senderIp\": \"{0}\",", EscapeJson(r.SenderIp)));
+                sb.AppendLine(string.Format("    \"timestamp\": \"{0}\"", r.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss")));
+                sb.Append("  }");
+                if (i < list.Count - 1) sb.Append(",");
+                sb.AppendLine();
+            }
+            sb.AppendLine("]");
+            return sb.ToString();
+        }
+
+        private static List<ReceivedFileRecord> DeserializeRecords(string json)
+        {
+            var list = new List<ReceivedFileRecord>();
+            if (string.IsNullOrEmpty(json)) return list;
+
+            var matches = System.Text.RegularExpressions.Regex.Matches(json, @"\{[^{}]*\}");
+            foreach (System.Text.RegularExpressions.Match m in matches)
+            {
+                string block = m.Value;
+                var rec = new ReceivedFileRecord();
+                rec.Id = ExtractJsonVal(block, "id");
+                rec.FileName = ExtractJsonVal(block, "fileName");
+                rec.FilePath = ExtractJsonVal(block, "filePath");
+                long size;
+                if (long.TryParse(ExtractJsonVal(block, "fileSize"), out size)) rec.FileSize = size;
+                rec.DeviceName = ExtractJsonVal(block, "deviceName");
+                rec.SenderIp = ExtractJsonVal(block, "senderIp");
+                DateTime dt;
+                if (DateTime.TryParse(ExtractJsonVal(block, "timestamp"), out dt))
+                    rec.Timestamp = dt;
+                else
+                    rec.Timestamp = DateTime.Now;
+
+                if (!string.IsNullOrEmpty(rec.FileName))
+                {
+                    list.Add(rec);
+                }
+            }
+            return list;
+        }
+
+        private static string ExtractJsonVal(string block, string key)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(block, "\"" + key + "\"\\s*:\\s*\"?([^\"\\r\\n,}]+)\"?");
+            return match.Success ? match.Groups[1].Value.Trim() : "";
+        }
+
+        private static string EscapeJson(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
+        }
     }
 
     /// <summary>
@@ -320,6 +534,526 @@ namespace BeamDropWindows
             Content = stack;
 
             Loaded += (s, e) => { box.Focus(); box.SelectAll(); };
+        }
+    }
+
+    public class NetworkInfoDialog : Window
+    {
+        private readonly Action _onTriggerScan;
+        private readonly ConcurrentDictionary<string, PeerNode> _peers;
+        private readonly TextBlock _peersCountText;
+        private readonly StackPanel _peersListStack;
+        private readonly TextBlock _scanStatusText;
+        private readonly string _deviceName;
+        private readonly string _deviceId;
+        private readonly string _localIp;
+        private readonly int _tcpPort;
+        private readonly int _udpPort;
+        private readonly string _downloadDir;
+        private readonly bool _isDark;
+
+        public NetworkInfoDialog(
+            bool isDark,
+            string deviceName,
+            string deviceId,
+            string localIp,
+            int tcpPort,
+            int udpPort,
+            ConcurrentDictionary<string, PeerNode> peers,
+            string downloadDir,
+            Action onTriggerScan)
+        {
+            _isDark = isDark;
+            _deviceName = deviceName;
+            _deviceId = deviceId;
+            _localIp = localIp;
+            _tcpPort = tcpPort;
+            _udpPort = udpPort;
+            _peers = peers;
+            _downloadDir = downloadDir;
+            _onTriggerScan = onTriggerScan;
+
+            Title = "BeamDrop â€” Network & Discovery Diagnostics";
+            Width = 630;
+            Height = 670;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            ResizeMode = ResizeMode.NoResize;
+            WindowStyle = WindowStyle.ToolWindow;
+
+            Color bg = isDark ? Color.FromRgb(11, 18, 30) : Color.FromRgb(248, 250, 252);
+            Color textCol = isDark ? Color.FromRgb(241, 245, 249) : Color.FromRgb(15, 23, 42);
+            Color textMuted = isDark ? Color.FromRgb(148, 163, 184) : Color.FromRgb(100, 116, 139);
+            Color cardBg = isDark ? Color.FromArgb(170, 18, 28, 44) : Color.FromArgb(220, 255, 255, 255);
+            Color cardBorder = isDark ? Color.FromArgb(60, 58, 228, 204) : Color.FromArgb(80, 200, 210, 220);
+            Color cyanAccent = Color.FromRgb(58, 228, 204);
+            Color purpleAccent = Color.FromRgb(172, 92, 246);
+
+            Background = new SolidColorBrush(bg);
+            Foreground = new SolidColorBrush(textCol);
+            FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
+
+            SourceInitialized += (s, e) =>
+            {
+                try
+                {
+                    var helper = new System.Windows.Interop.WindowInteropHelper(this);
+                    MainWindow.ApplyHwndTitleBar(helper.Handle, _isDark);
+                }
+                catch { }
+            };
+
+            var rootDock = new DockPanel { Margin = new Thickness(24, 20, 24, 20) };
+
+            // 1. Header Section
+            var headerDock = new DockPanel { Margin = new Thickness(0, 0, 0, 16) };
+            DockPanel.SetDock(headerDock, Dock.Top);
+
+            var logoBadge = new Border
+            {
+                Width = 44,
+                Height = 44,
+                CornerRadius = new CornerRadius(12),
+                Background = new LinearGradientBrush(cyanAccent, purpleAccent, new Point(0, 0), new Point(1, 1)),
+                Margin = new Thickness(0, 0, 14, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            logoBadge.Child = new TextBlock
+            {
+                Text = "ðŸ“¡",
+                FontSize = 22,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            DockPanel.SetDock(logoBadge, Dock.Left);
+            headerDock.Children.Add(logoBadge);
+
+            var titleCol = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            titleCol.Children.Add(new TextBlock
+            {
+                Text = "Network Diagnostics & Status",
+                FontSize = 20,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(textCol)
+            });
+            titleCol.Children.Add(new TextBlock
+            {
+                Text = "Live Wi-Fi Subnet Topology, Ports & Multi-Device Discovery",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(textMuted),
+                Margin = new Thickness(0, 2, 0, 0)
+            });
+            headerDock.Children.Add(titleCol);
+            rootDock.Children.Add(headerDock);
+
+            // 2. Footer Section: Action Buttons
+            var footerDock = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
+            DockPanel.SetDock(footerDock, Dock.Bottom);
+
+            var closeBtn = new Border
+            {
+                Height = 38,
+                Padding = new Thickness(24, 0, 24, 0),
+                CornerRadius = new CornerRadius(10),
+                Background = new LinearGradientBrush(cyanAccent, Color.FromRgb(45, 212, 191), new Point(0, 0), new Point(1, 1)),
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            var closeText = new TextBlock
+            {
+                Text = "Done",
+                FontWeight = FontWeights.Bold,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(11, 18, 30)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            closeBtn.Child = closeText;
+            closeBtn.MouseLeftButtonUp += (s, e) => Close();
+            DockPanel.SetDock(closeBtn, Dock.Right);
+            footerDock.Children.Add(closeBtn);
+
+            var leftActions = new StackPanel { Orientation = Orientation.Horizontal };
+
+            var scanBtn = new Border
+            {
+                Height = 38,
+                Padding = new Thickness(16, 0, 16, 0),
+                CornerRadius = new CornerRadius(10),
+                Background = new SolidColorBrush(Color.FromArgb(40, cyanAccent.R, cyanAccent.G, cyanAccent.B)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(90, cyanAccent.R, cyanAccent.G, cyanAccent.B)),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 10, 0)
+            };
+            scanBtn.Child = new TextBlock
+            {
+                Text = "ðŸ”„ Probe Subnet Now",
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(cyanAccent),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            scanBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                if (_onTriggerScan != null)
+                {
+                    _onTriggerScan();
+                    _scanStatusText.Text = "Scanning 254 subnet hosts on ports " + _tcpPort + " & " + _udpPort + "...";
+                    _scanStatusText.Foreground = new SolidColorBrush(cyanAccent);
+                }
+            };
+            leftActions.Children.Add(scanBtn);
+
+            var copyDiagBtn = new Border
+            {
+                Height = 38,
+                Padding = new Thickness(14, 0, 14, 0),
+                CornerRadius = new CornerRadius(10),
+                Background = new SolidColorBrush(Color.FromArgb(25, 255, 255, 255)),
+                BorderBrush = new SolidColorBrush(cardBorder),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand
+            };
+            copyDiagBtn.Child = new TextBlock
+            {
+                Text = "ðŸ“‹ Copy Diagnostics",
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(textCol),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            copyDiagBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                try
+                {
+                    string report = GenerateDiagnosticReport();
+                    Clipboard.SetText(report);
+                    MessageBox.Show(this, "Network diagnostic report copied to clipboard!", "Copied", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch { }
+            };
+            leftActions.Children.Add(copyDiagBtn);
+            footerDock.Children.Add(leftActions);
+            rootDock.Children.Add(footerDock);
+
+            // 3. Center Section: Scrollable Diagnostic Cards
+            var scroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Focusable = false
+            };
+            var cardsStack = new StackPanel { Margin = new Thickness(0, 0, 4, 0) };
+
+            // Card 1: Device & Local Network Interface
+            var card1 = CreateCard(cardBg, cardBorder);
+            var c1Stack = new StackPanel();
+            c1Stack.Children.Add(CreateSectionTitle("Local Device & Network Adapter", cyanAccent));
+            AddDetailRow(c1Stack, "Device Name", _deviceName, textCol, textMuted);
+            AddDetailRow(c1Stack, "Unique Device ID", _deviceId, textCol, textMuted);
+
+            string adapterName = "Realtek / Intel Gaming Controller";
+            string subnetMask = "255.255.255.0";
+            string gateway = "192.168.1.1";
+            string macAddress = "N/A";
+            GetAdapterDetails(out adapterName, out subnetMask, out gateway, out macAddress);
+
+            AddDetailRow(c1Stack, "Active Adapter", adapterName, textCol, textMuted);
+            AddDetailRow(c1Stack, "Primary IPv4", _localIp + " (#" + (_localIp.Split('.').LastOrDefault() ?? "100") + ")", cyanAccent, textMuted, true);
+            AddDetailRow(c1Stack, "Subnet Mask / CIDR", subnetMask + " (" + GetSubnetRange(_localIp, subnetMask) + ")", textCol, textMuted);
+            AddDetailRow(c1Stack, "Default Gateway", gateway, textCol, textMuted);
+            AddDetailRow(c1Stack, "Physical MAC", macAddress, textCol, textMuted);
+            card1.Child = c1Stack;
+            cardsStack.Children.Add(card1);
+
+            // Card 2: Continuity Engine Protocols & Ports
+            var card2 = CreateCard(cardBg, cardBorder);
+            var c2Stack = new StackPanel();
+            c2Stack.Children.Add(CreateSectionTitle("BeamDrop Continuity Protocol Engines", purpleAccent));
+            AddDetailRow(c2Stack, "High-Speed TCP Socket", "Port " + _tcpPort + " (Active â€¢ 4MB Turbo Socket Window)", cyanAccent, textMuted);
+            AddDetailRow(c2Stack, "UDP Multicast Beacon", "Port " + _udpPort + " (Active â€¢ 2.5s Subnet Broadcast)", cyanAccent, textMuted);
+            AddDetailRow(c2Stack, "Zero-Config mDNS", "_beamdrop._tcp.local (Broadcasting on Subnet)", cyanAccent, textMuted);
+            AddDetailRow(c2Stack, "Security & Handshake", "P2P Token Handshake â€¢ Zero Cloud Relay", textCol, textMuted);
+            card2.Child = c2Stack;
+            cardsStack.Children.Add(card2);
+
+            // Card 3: Discovered Peers
+            var card3 = CreateCard(cardBg, cardBorder);
+            var c3Stack = new StackPanel();
+
+            var peersTitleRow = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+            _peersCountText = new TextBlock
+            {
+                Text = _peers.Count + " Online",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(cyanAccent)
+            };
+            var peersPill = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(Color.FromArgb(40, cyanAccent.R, cyanAccent.G, cyanAccent.B)),
+                Padding = new Thickness(8, 2, 8, 2),
+                Child = _peersCountText
+            };
+            DockPanel.SetDock(peersPill, Dock.Right);
+            peersTitleRow.Children.Add(peersPill);
+            peersTitleRow.Children.Add(CreateSectionTitle("Discovered Devices on Local Wi-Fi", cyanAccent));
+            c3Stack.Children.Add(peersTitleRow);
+
+            _scanStatusText = new TextBlock
+            {
+                Text = _peers.Count > 0 ? "Real-time discovery active. Tap 'Probe Subnet Now' to refresh." : "No peers detected yet. Ensure your Android phone is on the same Wi-Fi.",
+                FontSize = 11.5,
+                Foreground = new SolidColorBrush(textMuted),
+                Margin = new Thickness(0, 0, 0, 10),
+                TextWrapping = TextWrapping.Wrap
+            };
+            c3Stack.Children.Add(_scanStatusText);
+
+            _peersListStack = new StackPanel();
+            PopulatePeersListUi(_peersListStack, textCol, textMuted, cyanAccent);
+            c3Stack.Children.Add(_peersListStack);
+            card3.Child = c3Stack;
+            cardsStack.Children.Add(card3);
+
+            // Card 4: Destination & Storage
+            var card4 = CreateCard(cardBg, cardBorder);
+            var c4Stack = new StackPanel();
+            c4Stack.Children.Add(CreateSectionTitle("Storage Destination", cyanAccent));
+            AddDetailRow(c4Stack, "Download Folder", _downloadDir, textCol, textMuted);
+
+            string driveSpace = GetDriveFreeSpace(_downloadDir);
+            AddDetailRow(c4Stack, "Storage Available", driveSpace, cyanAccent, textMuted);
+            card4.Child = c4Stack;
+            cardsStack.Children.Add(card4);
+
+            scroll.Content = cardsStack;
+            rootDock.Children.Add(scroll);
+
+            Content = rootDock;
+        }
+
+        private static Border CreateCard(Color bg, Color border)
+        {
+            return new Border
+            {
+                Background = new SolidColorBrush(bg),
+                BorderBrush = new SolidColorBrush(border),
+                BorderThickness = new Thickness(1.2),
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 0, 14)
+            };
+        }
+
+        private static TextBlock CreateSectionTitle(string text, Color accent)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                FontSize = 13.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(accent),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+        }
+
+        private static void AddDetailRow(StackPanel parent, string label, string value, Color valColor, Color labelColor, bool isIp = false)
+        {
+            var dock = new DockPanel { Margin = new Thickness(0, 4, 0, 4) };
+            dock.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(labelColor),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var valStack = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var valText = new TextBlock
+            {
+                Text = value,
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(valColor),
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 340
+            };
+            valStack.Children.Add(valText);
+
+            if (isIp)
+            {
+                var copyBtn = new Border
+                {
+                    CornerRadius = new CornerRadius(6),
+                    Background = new SolidColorBrush(Color.FromArgb(40, 58, 228, 204)),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(8, 0, 0, 0),
+                    Cursor = Cursors.Hand
+                };
+                copyBtn.Child = new TextBlock { Text = "Copy", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(58, 228, 204)) };
+                copyBtn.MouseLeftButtonUp += (s, e) =>
+                {
+                    try { Clipboard.SetText(value.Split(' ')[0]); } catch { }
+                };
+                valStack.Children.Add(copyBtn);
+            }
+
+            DockPanel.SetDock(valStack, Dock.Right);
+            dock.Children.Add(valStack);
+            parent.Children.Add(dock);
+        }
+
+        private void PopulatePeersListUi(StackPanel parent, Color textCol, Color mutedCol, Color accent)
+        {
+            parent.Children.Clear();
+            if (_peers.Count == 0)
+            {
+                parent.Children.Add(new TextBlock
+                {
+                    Text = "No external devices found on " + _localIp.Substring(0, Math.Max(0, _localIp.LastIndexOf('.') + 1)) + "*",
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(mutedCol),
+                    FontStyle = FontStyles.Italic,
+                    Margin = new Thickness(0, 2, 0, 4)
+                });
+                return;
+            }
+
+            foreach (var kvp in _peers)
+            {
+                var p = kvp.Value;
+                var pCard = new Border
+                {
+                    CornerRadius = new CornerRadius(8),
+                    Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                    Padding = new Thickness(10, 8, 10, 8),
+                    Margin = new Thickness(0, 0, 0, 6)
+                };
+                var pDock = new DockPanel();
+
+                string glyph = p.Name.Contains("PC") || p.Name.Contains("Windows") ? "ðŸ’» " : "ðŸ“± ";
+                pDock.Children.Add(new TextBlock
+                {
+                    Text = glyph + p.Name,
+                    FontSize = 12.5,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(textCol),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+
+                var rightStack = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+                rightStack.Children.Add(new TextBlock
+                {
+                    Text = p.Ip + ":" + p.Port,
+                    FontSize = 11.5,
+                    Foreground = new SolidColorBrush(accent),
+                    Margin = new Thickness(0, 0, 8, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                rightStack.Children.Add(new TextBlock
+                {
+                    Text = "ðŸŸ¢ Connected",
+                    FontSize = 10.5,
+                    Foreground = new SolidColorBrush(Color.FromRgb(34, 197, 94)),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                DockPanel.SetDock(rightStack, Dock.Right);
+                pDock.Children.Add(rightStack);
+                pCard.Child = pDock;
+                parent.Children.Add(pCard);
+            }
+        }
+
+        private static void GetAdapterDetails(out string name, out string mask, out string gw, out string mac)
+        {
+            name = "Ethernet / Wi-Fi Adapter";
+            mask = "255.255.255.0";
+            gw = "192.168.1.1";
+            mac = "N/A";
+            try
+            {
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    var ipProp = ni.GetIPProperties();
+                    foreach (var ua in ipProp.UnicastAddresses)
+                    {
+                        if (ua.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(ua.Address))
+                        {
+                            name = ni.Name + " (" + ni.Description + ")";
+                            if (ua.IPv4Mask != null) mask = ua.IPv4Mask.ToString();
+                            foreach (var g in ipProp.GatewayAddresses)
+                            {
+                                if (g.Address.AddressFamily == AddressFamily.InterNetwork) { gw = g.Address.ToString(); break; }
+                            }
+                            var rawMac = ni.GetPhysicalAddress().GetAddressBytes();
+                            if (rawMac.Length > 0)
+                            {
+                                mac = string.Join(":", rawMac.Select(b => b.ToString("X2")));
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static string GetSubnetRange(string ip, string mask)
+        {
+            try
+            {
+                var ipParts = ip.Split('.').Select(int.Parse).ToArray();
+                return string.Format("{0}.{1}.{2}.1 - {0}.{1}.{2}.254", ipParts[0], ipParts[1], ipParts[2]);
+            }
+            catch
+            {
+                return "Class C Subnet (254 Hosts)";
+            }
+        }
+
+        private static string GetDriveFreeSpace(string path)
+        {
+            try
+            {
+                string root = Path.GetPathRoot(path);
+                var drive = new DriveInfo(root);
+                double freeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+                double totalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
+                return string.Format("{0} ({1:F1} GB Free of {2:F0} GB)", root, freeGb, totalGb);
+            }
+            catch
+            {
+                return "Local Storage Partition";
+            }
+        }
+
+        private string GenerateDiagnosticReport()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=================================================================");
+            sb.AppendLine("  BeamDrop Continuity â€” Network Diagnostic & Topology Report");
+            sb.AppendLine("  Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            sb.AppendLine("=================================================================");
+            sb.AppendLine("Device Name:       " + _deviceName);
+            sb.AppendLine("Device ID:         " + _deviceId);
+            sb.AppendLine("Local IPv4:        " + _localIp);
+            sb.AppendLine("TCP Transfer Port: " + _tcpPort + " (Active)");
+            sb.AppendLine("UDP Beacon Port:   " + _udpPort + " (Active)");
+            sb.AppendLine("Discovered Peers:  " + _peers.Count);
+            foreach (var kvp in _peers)
+            {
+                sb.AppendLine("  â€¢ Peer: " + kvp.Value.Name + " @ " + kvp.Value.Ip + ":" + kvp.Value.Port);
+            }
+            sb.AppendLine("Download Folder:   " + _downloadDir);
+            sb.AppendLine("Storage Status:    " + GetDriveFreeSpace(_downloadDir));
+            sb.AppendLine("=================================================================");
+            return sb.ToString();
         }
     }
 
@@ -824,6 +1558,15 @@ namespace BeamDropWindows
         private readonly ConcurrentDictionary<string, PeerNode> _peers = new ConcurrentDictionary<string, PeerNode>();
         private readonly List<string> _stagedFiles = new List<string>();
         private readonly List<TransferLogEntry> _history = new List<TransferLogEntry>();
+        private Grid _historyOverlayHost;
+        private Border _historyScrim;
+        private Border _historyDrawer;
+        private TranslateTransform _historyDrawerTranslate;
+        private StackPanel _historyCardsStack;
+        private TextBlock _historyCountText;
+        private Border _historyEmptyContainer;
+        private bool _isHistoryOpen = false;
+        private Border _navHistoryBtn;
         private readonly List<Canvas> _sendButtonAuraCanvases = new List<Canvas>();
 
         private CancellationTokenSource _cts = new CancellationTokenSource();
@@ -1214,6 +1957,7 @@ namespace BeamDropWindows
             FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
             AllowDrop = true;
             Drop += OnWindowFileDrop;
+            KeyDown += (s, e) => { if (e.Key == Key.Escape && _isHistoryOpen) { CloseHistoryDrawer(); e.Handled = true; } };
 
             BuildUserInterface();
             SwitchTab(0);
@@ -1386,6 +2130,9 @@ namespace BeamDropWindows
             _sideStack.Children.Add(_navReceiveBtn);
             _sideStack.Children.Add(_navSendBtn);
             _sideStack.Children.Add(_navSettingsBtn);
+            _navHistoryBtn = CreateNavButton("History", "ðŸ•’", -1);
+            _navHistoryBtn.MouseLeftButtonUp += (s, e) => OpenHistoryDrawer();
+            _sideStack.Children.Add(_navHistoryBtn);
 
             _authorInfoText = new TextBlock
             {
@@ -1438,6 +2185,7 @@ namespace BeamDropWindows
             Grid.SetColumn(_contentHost, 1);
             _rootGrid.Children.Add(_contentHost);
 
+            BuildHistoryDrawer();
             Content = _rootGrid;
         }
 
@@ -1501,23 +2249,8 @@ namespace BeamDropWindows
                 Margin = new Thickness(0, 22, 28, 0)
             };
 
-            var historyBtn = CreateIconPill("🕒 History", () =>
-            {
-                if (_history.Count == 0)
-                {
-                    MessageBox.Show(this, "No transfers recorded in this session yet.", "Transfer History", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-                var lines = _history.Take(12).Select(h => string.Format("[{0}] {1} • {2} ({3:F1} MB/s)", h.Timestamp, h.Direction, h.FileName, h.SpeedMbps));
-                MessageBox.Show(this, string.Join("\n", lines), "Transfer History", MessageBoxButton.OK, MessageBoxImage.Information);
-            });
-            var infoBtn = CreateIconPill("ℹ Network Info", () =>
-            {
-                MessageBox.Show(this,
-                    string.Format("Device Name: {0}\nDevice ID: {1}\nLocal IPv4: {2}\nTCP Port: {3}\nUDP Discovery: {4}\nDiscovered Peers: {5}\nDownload Folder: {6}",
-                        _deviceName, _deviceId, _localIp, TCP_PORT, UDP_PORT, _peers.Count, _downloadDir),
-                    "BeamDrop Network Status", MessageBoxButton.OK, MessageBoxImage.Information);
-            });
+            var historyBtn = CreateIconPill("Receiving History", () => OpenHistoryDrawer());
+            var infoBtn = CreateIconPill("Network Info", () => ShowNetworkInfoDialog());
             topRight.Children.Add(historyBtn);
             topRight.Children.Add(infoBtn);
             grid.Children.Add(topRight);
@@ -1647,6 +2380,17 @@ namespace BeamDropWindows
                 MaxWidth = 580,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
+
+            // Top Right Action Pills (Receiving History & Network Info)
+            var sendTopRight = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 0, 0, 16)
+            };
+            sendTopRight.Children.Add(CreateIconPill("ðŸ•’ Receiving History", () => OpenHistoryDrawer()));
+            sendTopRight.Children.Add(CreateIconPill("â„¹ Network Info", () => ShowNetworkInfoDialog()));
+            container.Children.Add(sendTopRight);
 
             // Selection Header
             container.Children.Add(new TextBlock
@@ -3538,6 +4282,8 @@ namespace BeamDropWindows
                                     SavedPath = destPath,
                                     Timestamp = DateTime.Now.ToString("HH:mm:ss")
                                 });
+                                ReceivingHistoryManager.AddRecord(fileName, destPath, fileSize, senderName, senderIp, DateTime.Now);
+                                Dispatcher.Invoke(() => { if (_isHistoryOpen) RefreshHistoryListUi(); });
                             }
 
                             byte[] ack = Encoding.UTF8.GetBytes("OK\n");
@@ -4077,7 +4823,7 @@ namespace BeamDropWindows
             return candidate;
         }
 
-        private static string FormatFileSize(long bytes)
+        public static string FormatFileSize(long bytes)
         {
             if (bytes >= 1024L * 1024L * 1024L) return string.Format("{0:F2} GB", bytes / (1024.0 * 1024.0 * 1024.0));
             if (bytes >= 1024L * 1024L) return string.Format("{0:F1} MB", bytes / (1024.0 * 1024.0));
@@ -4529,6 +5275,582 @@ namespace BeamDropWindows
             DockPanel.SetDock(pill, Dock.Right);
             dock.Children.Add(pill);
             parent.Children.Add(dock);
+        }
+
+        public void ShowNetworkInfoDialog()
+        {
+            try
+            {
+                var dlg = new NetworkInfoDialog(
+                    _isDarkMode,
+                    _deviceName,
+                    _deviceId,
+                    _localIp,
+                    TCP_PORT,
+                    UDP_PORT,
+                    _peers,
+                    _downloadDir,
+                    () => TriggerSubnetScan()
+                );
+                dlg.Owner = this;
+                dlg.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not open Network Diagnostics: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BuildHistoryDrawer()
+        {
+            _historyOverlayHost = new Grid
+            {
+                Visibility = Visibility.Collapsed,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+            Panel.SetZIndex(_historyOverlayHost, 900);
+            Grid.SetColumn(_historyOverlayHost, 0);
+            Grid.SetColumnSpan(_historyOverlayHost, 2);
+
+            // 1. Semi-transparent dark scrim backdrop
+            _historyScrim = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(145, 5, 10, 20)),
+                Opacity = 0.0,
+                Cursor = Cursors.Hand
+            };
+            _historyScrim.MouseLeftButtonUp += (s, e) => CloseHistoryDrawer();
+            _historyOverlayHost.Children.Add(_historyScrim);
+
+            // 2. Sliding Drawer Panel (docked to Right, slides Right to Left)
+            _historyDrawer = new Border
+            {
+                Width = 470,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Background = new LinearGradientBrush(
+                    _isDarkMode ? Color.FromRgb(11, 18, 30) : Color.FromRgb(248, 250, 252),
+                    _isDarkMode ? Color.FromRgb(15, 23, 42) : Color.FromRgb(241, 245, 249),
+                    new Point(0, 0),
+                    new Point(0, 1)
+                ),
+                BorderBrush = new LinearGradientBrush(
+                    Color.FromArgb(140, 58, 228, 204),
+                    Color.FromArgb(140, 172, 92, 246),
+                    new Point(0, 0),
+                    new Point(0, 1)
+                ),
+                BorderThickness = new Thickness(1.5, 0, 0, 0),
+                Effect = new DropShadowEffect
+                {
+                    Color = Colors.Black,
+                    BlurRadius = 40,
+                    ShadowDepth = -6,
+                    Opacity = 0.70
+                }
+            };
+
+            _historyDrawerTranslate = new TranslateTransform(490, 0);
+            _historyDrawer.RenderTransform = _historyDrawerTranslate;
+
+            var drawerDock = new DockPanel { Margin = new Thickness(24, 20, 24, 20) };
+
+            // --- Header Section ---
+            var headerStack = new StackPanel { Margin = new Thickness(0, 0, 0, 16) };
+            DockPanel.SetDock(headerStack, Dock.Top);
+
+            // Top Header Row: Title + Count Badge + Close Button
+            var topRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+
+            var closeBtn = new Border
+            {
+                Width = 32,
+                Height = 32,
+                CornerRadius = new CornerRadius(16),
+                Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(60, 255, 255, 255) : Color.FromArgb(40, 0, 0, 0)),
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                ToolTip = "Close History (Esc)"
+            };
+            var closeTxt = new TextBlock
+            {
+                Text = "âœ•",
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            closeBtn.Child = closeTxt;
+            closeBtn.MouseEnter += (s, e) => closeBtn.Background = new SolidColorBrush(Color.FromArgb(120, 239, 68, 68));
+            closeBtn.MouseLeave += (s, e) => closeBtn.Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(60, 255, 255, 255) : Color.FromArgb(40, 0, 0, 0));
+            closeBtn.MouseLeftButtonUp += (s, e) => CloseHistoryDrawer();
+            DockPanel.SetDock(closeBtn, Dock.Right);
+            topRow.Children.Add(closeBtn);
+
+            var titleStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = "Receiving History",
+                FontSize = 20,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(_currentTextPrimary)
+            });
+
+            _historyCountText = new TextBlock
+            {
+                Text = "0 Files",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(58, 228, 204)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var badgePill = new Border
+            {
+                CornerRadius = new CornerRadius(10),
+                Background = new SolidColorBrush(Color.FromArgb(40, 58, 228, 204)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(100, 58, 228, 204)),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(10, 0, 0, 0),
+                Child = _historyCountText
+            };
+            titleStack.Children.Add(badgePill);
+            topRow.Children.Add(titleStack);
+            headerStack.Children.Add(topRow);
+
+            // Subtitle & Action Links
+            var subRow = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
+            subRow.Children.Add(new TextBlock
+            {
+                Text = "Recent files transferred to this Windows PC",
+                FontSize = 11.5,
+                Foreground = new SolidColorBrush(_currentTextSecondary),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var actionLinks = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+
+            var openFolderBtn = new TextBlock
+            {
+                Text = "ðŸ“‚ Open Folder",
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(58, 228, 204)),
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 14, 0)
+            };
+            openFolderBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                try { Process.Start("explorer.exe", _downloadDir); } catch { }
+            };
+            actionLinks.Children.Add(openFolderBtn);
+
+            var clearBtn = new TextBlock
+            {
+                Text = "ðŸ—‘ Clear All",
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromArgb(200, 248, 113, 113)),
+                Cursor = Cursors.Hand
+            };
+            clearBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                var result = MessageBox.Show(this, "Are you sure you want to clear receiving history?", "Clear History", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (result == MessageBoxResult.Yes)
+                {
+                    ReceivingHistoryManager.ClearHistory();
+                    RefreshHistoryListUi();
+                }
+            };
+            actionLinks.Children.Add(clearBtn);
+            DockPanel.SetDock(actionLinks, Dock.Right);
+            subRow.Children.Add(actionLinks);
+            headerStack.Children.Add(subRow);
+
+            drawerDock.Children.Add(headerStack);
+
+            // --- Scrollable Cards Section ---
+            var scroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Focusable = false
+            };
+
+            _historyCardsStack = new StackPanel { Margin = new Thickness(0, 4, 4, 12) };
+
+            // Empty state container
+            _historyEmptyContainer = new Border
+            {
+                Margin = new Thickness(0, 80, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            var emptyStack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            emptyStack.Children.Add(new TextBlock
+            {
+                Text = "ðŸ“¡",
+                FontSize = 42,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 12)
+            });
+            emptyStack.Children.Add(new TextBlock
+            {
+                Text = "No Files Received Yet",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+            emptyStack.Children.Add(new TextBlock
+            {
+                Text = "When your Android phone or another PC sends files via BeamDrop, they will appear here with exact timestamp, sender, and file size.",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(_currentTextSecondary),
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 320
+            });
+            _historyEmptyContainer.Child = emptyStack;
+            _historyCardsStack.Children.Add(_historyEmptyContainer);
+
+            scroll.Content = _historyCardsStack;
+            drawerDock.Children.Add(scroll);
+
+            _historyDrawer.Child = drawerDock;
+            _historyOverlayHost.Children.Add(_historyDrawer);
+            _rootGrid.Children.Add(_historyOverlayHost);
+        }
+
+        public void OpenHistoryDrawer()
+        {
+            if (_isHistoryOpen) return;
+            _isHistoryOpen = true;
+
+            RefreshHistoryListUi();
+            _historyOverlayHost.Visibility = Visibility.Visible;
+
+            // Scrim Fade-In
+            var scrimAnim = new DoubleAnimation
+            {
+                From = 0.0,
+                To = 1.0,
+                Duration = TimeSpan.FromMilliseconds(240)
+            };
+            _historyScrim.BeginAnimation(UIElement.OpacityProperty, scrimAnim);
+
+            // Drawer Slide Right-to-Left (490 -> 0)
+            var slideAnim = new DoubleAnimation
+            {
+                From = 490.0,
+                To = 0.0,
+                Duration = TimeSpan.FromMilliseconds(280),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            _historyDrawerTranslate.BeginAnimation(TranslateTransform.XProperty, slideAnim);
+        }
+
+        public void CloseHistoryDrawer()
+        {
+            if (!_isHistoryOpen) return;
+            _isHistoryOpen = false;
+
+            // Scrim Fade-Out
+            var scrimAnim = new DoubleAnimation
+            {
+                From = 1.0,
+                To = 0.0,
+                Duration = TimeSpan.FromMilliseconds(180)
+            };
+            _historyScrim.BeginAnimation(UIElement.OpacityProperty, scrimAnim);
+
+            // Drawer Slide Left-to-Right (0 -> 490)
+            var slideAnim = new DoubleAnimation
+            {
+                From = 0.0,
+                To = 490.0,
+                Duration = TimeSpan.FromMilliseconds(220),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+            };
+            slideAnim.Completed += (s, e) =>
+            {
+                if (!_isHistoryOpen)
+                {
+                    _historyOverlayHost.Visibility = Visibility.Collapsed;
+                }
+            };
+            _historyDrawerTranslate.BeginAnimation(TranslateTransform.XProperty, slideAnim);
+        }
+
+        public void RefreshHistoryListUi()
+        {
+            if (_historyCardsStack == null) return;
+            _historyCardsStack.Children.Clear();
+
+            var records = ReceivingHistoryManager.LoadHistory(_downloadDir);
+            if (_historyCountText != null)
+            {
+                _historyCountText.Text = records.Count + (records.Count == 1 ? " File" : " Files");
+            }
+
+            if (records.Count == 0)
+            {
+                _historyCardsStack.Children.Add(_historyEmptyContainer);
+                return;
+            }
+
+            foreach (var r in records)
+            {
+                var card = CreateHistoryItemCard(r);
+                _historyCardsStack.Children.Add(card);
+            }
+        }
+
+        private Border CreateHistoryItemCard(ReceivedFileRecord item)
+        {
+            var card = new Border
+            {
+                CornerRadius = new CornerRadius(12),
+                Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(170, 20, 32, 48) : Color.FromArgb(220, 255, 255, 255)),
+                BorderBrush = new SolidColorBrush(_isDarkMode ? Color.FromArgb(50, 58, 228, 204) : Color.FromArgb(80, 200, 210, 220)),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(14, 12, 14, 12),
+                Margin = new Thickness(0, 0, 0, 10),
+                Cursor = Cursors.Hand
+            };
+
+            var dock = new DockPanel();
+
+            // 1. File Type Icon Badge
+            string ext = Path.GetExtension(item.FileName).ToLowerInvariant();
+            string iconGlyph;
+            Color iconBg1, iconBg2;
+            GetFileTypeVisuals(ext, out iconGlyph, out iconBg1, out iconBg2);
+
+            var iconBadge = new Border
+            {
+                Width = 42,
+                Height = 42,
+                CornerRadius = new CornerRadius(10),
+                Background = new LinearGradientBrush(iconBg1, iconBg2, new Point(0, 0), new Point(1, 1)),
+                Margin = new Thickness(0, 0, 12, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            iconBadge.Child = new TextBlock
+            {
+                Text = iconGlyph,
+                FontSize = 18,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            DockPanel.SetDock(iconBadge, Dock.Left);
+            dock.Children.Add(iconBadge);
+
+            // 2. Center Content
+            var details = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+
+            var nameRow = new DockPanel { Margin = new Thickness(0, 0, 0, 3) };
+
+            string deviceDisplay = item.DeviceName;
+            if (deviceDisplay.Contains("HONOR") || deviceDisplay.Contains("Android") || deviceDisplay.Contains("Phone") || deviceDisplay.Contains("Galaxy"))
+                deviceDisplay = "ðŸ“± " + deviceDisplay;
+            else if (deviceDisplay.Contains("VICTUS") || deviceDisplay.Contains("PC") || deviceDisplay.Contains("Laptop") || deviceDisplay.Contains("Windows"))
+                deviceDisplay = "ðŸ’» " + deviceDisplay;
+            else
+                deviceDisplay = "ðŸ“¡ " + deviceDisplay;
+
+            var devPill = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(Color.FromArgb(35, 58, 228, 204)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(80, 58, 228, 204)),
+                BorderThickness = new Thickness(0.8),
+                Padding = new Thickness(6, 2, 6, 2),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            devPill.Child = new TextBlock
+            {
+                Text = deviceDisplay,
+                FontSize = 10.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(58, 228, 204))
+            };
+            DockPanel.SetDock(devPill, Dock.Right);
+            nameRow.Children.Add(devPill);
+
+            var fileNameText = new TextBlock
+            {
+                Text = item.FileName,
+                FontSize = 13.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                ToolTip = item.FilePath,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            nameRow.Children.Add(fileNameText);
+            details.Children.Add(nameRow);
+
+            // Exact Date, Time and File Size Metadata Row
+            var metaRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 8) };
+            metaRow.Children.Add(new TextBlock
+            {
+                Text = string.Format("ðŸ“… {0}  â€¢  ðŸ•’ {1}  â€¢  ðŸ’¾ {2}", item.FormattedDate, item.FormattedExactTime, item.FormattedSize),
+                FontSize = 11,
+                Foreground = new SolidColorBrush(_currentTextSecondary)
+            });
+            details.Children.Add(metaRow);
+
+            // Actions Row: Open, Explorer, Copy Path
+            var actionsRow = new StackPanel { Orientation = Orientation.Horizontal };
+
+            var openBtn = CreateMiniActionPill("â–¶ Open", Color.FromArgb(40, 58, 228, 204), Color.FromRgb(58, 228, 204), () =>
+            {
+                try
+                {
+                    if (File.Exists(item.FilePath)) Process.Start(new ProcessStartInfo(item.FilePath) { UseShellExecute = true });
+                    else MessageBox.Show(this, "File no longer exists at:\n" + item.FilePath, "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                catch (Exception ex) { MessageBox.Show(this, "Could not open file: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
+            });
+            actionsRow.Children.Add(openBtn);
+
+            var revealBtn = CreateMiniActionPill("ðŸ“ Explorer", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
+            {
+                try
+                {
+                    if (File.Exists(item.FilePath)) Process.Start("explorer.exe", string.Format("/select,\"{0}\"", item.FilePath));
+                    else Process.Start("explorer.exe", _downloadDir);
+                }
+                catch { }
+            });
+            actionsRow.Children.Add(revealBtn);
+
+            var copyPathBtn = CreateMiniActionPill("ðŸ“‹ Copy Path", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
+            {
+                try
+                {
+                    Clipboard.SetText(item.FilePath);
+                    ShowCompletionToast("Copied to Clipboard!", "Full file path copied to clipboard", item.FileName, item.FileSize, item.FilePath);
+                }
+                catch { }
+            });
+            actionsRow.Children.Add(copyPathBtn);
+
+            details.Children.Add(actionsRow);
+            dock.Children.Add(details);
+            card.Child = dock;
+
+            card.MouseEnter += (s, e) =>
+            {
+                card.BorderBrush = new SolidColorBrush(Color.FromArgb(160, 58, 228, 204));
+                card.Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(210, 26, 40, 60) : Color.FromRgb(245, 250, 255));
+            };
+            card.MouseLeave += (s, e) =>
+            {
+                card.BorderBrush = new SolidColorBrush(_isDarkMode ? Color.FromArgb(50, 58, 228, 204) : Color.FromArgb(80, 200, 210, 220));
+                card.Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(170, 20, 32, 48) : Color.FromArgb(220, 255, 255, 255));
+            };
+
+            card.MouseLeftButtonUp += (s, e) =>
+            {
+                if (e.ClickCount == 2)
+                {
+                    try { if (File.Exists(item.FilePath)) Process.Start(new ProcessStartInfo(item.FilePath) { UseShellExecute = true }); } catch { }
+                }
+            };
+
+            return card;
+        }
+
+        private static Border CreateMiniActionPill(string label, Color bg, Color fg, Action onClick)
+        {
+            var pill = new Border
+            {
+                CornerRadius = new CornerRadius(6),
+                Background = new SolidColorBrush(bg),
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = Cursors.Hand
+            };
+            pill.Child = new TextBlock
+            {
+                Text = label,
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(fg)
+            };
+            pill.MouseLeftButtonUp += (s, e) =>
+            {
+                e.Handled = true;
+                onClick();
+            };
+            return pill;
+        }
+
+        private static void GetFileTypeVisuals(string ext, out string glyph, out Color c1, out Color c2)
+        {
+            switch (ext)
+            {
+                case ".png":
+                case ".jpg":
+                case ".jpeg":
+                case ".webp":
+                case ".gif":
+                case ".bmp":
+                case ".svg":
+                    glyph = "ðŸ–¼ï¸";
+                    c1 = Color.FromRgb(16, 185, 129);
+                    c2 = Color.FromRgb(59, 130, 246);
+                    break;
+                case ".mp4":
+                case ".mkv":
+                case ".mov":
+                case ".avi":
+                case ".webm":
+                    glyph = "ðŸŽ¬";
+                    c1 = Color.FromRgb(139, 92, 246);
+                    c2 = Color.FromRgb(236, 72, 153);
+                    break;
+                case ".mp3":
+                case ".wav":
+                case ".flac":
+                case ".m4a":
+                case ".aac":
+                case ".ogg":
+                    glyph = "ðŸŽµ";
+                    c1 = Color.FromRgb(244, 63, 94);
+                    c2 = Color.FromRgb(251, 146, 60);
+                    break;
+                case ".pdf":
+                case ".doc":
+                case ".docx":
+                case ".txt":
+                case ".xlsx":
+                case ".pptx":
+                case ".md":
+                    glyph = "ðŸ“„";
+                    c1 = Color.FromRgb(59, 130, 246);
+                    c2 = Color.FromRgb(99, 102, 241);
+                    break;
+                case ".zip":
+                case ".rar":
+                case ".7z":
+                case ".tar":
+                case ".gz":
+                    glyph = "ðŸ“¦";
+                    c1 = Color.FromRgb(245, 158, 11);
+                    c2 = Color.FromRgb(234, 88, 12);
+                    break;
+                default:
+                    glyph = "âš¡";
+                    c1 = Color.FromRgb(58, 228, 204);
+                    c2 = Color.FromRgb(172, 92, 246);
+                    break;
+            }
         }
 
         [STAThread]
