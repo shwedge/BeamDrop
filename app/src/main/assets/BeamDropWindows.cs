@@ -1235,12 +1235,10 @@ namespace BeamDropWindows
             {
                 Width = 38,
                 Height = 38,
-                CornerRadius = new CornerRadius(11),
-                Background = new LinearGradientBrush(
-                    ElectricCyan,
-                    RadiantPurple,
-                    45.0
-                ),
+                CornerRadius = new CornerRadius(10),
+                ClipToBounds = true,
+                BorderBrush = new LinearGradientBrush(ElectricCyan, RadiantPurple, 45.0),
+                BorderThickness = new Thickness(1.2),
                 Effect = new DropShadowEffect
                 {
                     Color = ElectricCyan,
@@ -1250,30 +1248,95 @@ namespace BeamDropWindows
                 }
             };
 
-            var emblemCanvas = new Canvas
+            var viewbox = new Viewbox
             {
-                Width = 22,
-                Height = 22,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
+                Width = 38,
+                Height = 38,
+                Stretch = Stretch.Uniform
             };
-            var dropPath = new SystemPath
+
+            var logoCanvas = new Canvas
             {
-                Data = Geometry.Parse("M11,2 C7.5,7 5,10.5 5,14.5 C5,17.8 7.7,20.5 11,20.5 C14.3,20.5 17,17.8 17,14.5 C17,10.5 14.5,7 11,2 Z"),
-                Fill = new SolidColorBrush(Color.FromRgb(9, 13, 20)),
-                Width = 22,
-                Height = 22
+                Width = 108,
+                Height = 108,
+                ClipToBounds = true
             };
-            var sparkPath = new SystemPath
+
+            // 1. Cosmic Gradient Background matching Android ic_launcher_background.xml
+            var bgRect = new System.Windows.Shapes.Rectangle
             {
-                Data = Geometry.Parse("M11,11 C9.8,11 9,11.8 9,13 C9,14.8 11,17 11,17 C11,17 13,14.8 13,13 C13,11.8 12.2,11 11,11 Z"),
-                Fill = Brushes.White,
-                Width = 22,
-                Height = 22
+                Width = 108,
+                Height = 108,
+                RadiusX = 22,
+                RadiusY = 22,
+                Fill = new LinearGradientBrush(
+                    Color.FromRgb(11, 14, 20),
+                    Color.FromRgb(26, 34, 56),
+                    new Point(0, 0),
+                    new Point(1, 1)
+                )
             };
-            emblemCanvas.Children.Add(dropPath);
-            emblemCanvas.Children.Add(sparkPath);
-            logoBadge.Child = emblemCanvas;
+            logoCanvas.Children.Add(bgRect);
+
+            // 2. Ripple Origin Arc 1 (#7B2CBF)
+            var arc1 = new SystemPath
+            {
+                Data = Geometry.Parse("M38,32 C43,26 65,26 70,32"),
+                Stroke = new SolidColorBrush(Color.FromRgb(123, 44, 191)),
+                StrokeThickness = 3.5,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            logoCanvas.Children.Add(arc1);
+
+            // 3. Ripple Origin Arc 2 (#9D4EDD)
+            var arc2 = new SystemPath
+            {
+                Data = Geometry.Parse("M32,38 C40,29 68,29 76,38"),
+                Stroke = new SolidColorBrush(Color.FromRgb(157, 78, 221)),
+                StrokeThickness = 3.5,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            logoCanvas.Children.Add(arc2);
+
+            // 4. Primary Ripple Arc 3 (#00F5D4)
+            var arc3 = new SystemPath
+            {
+                Data = Geometry.Parse("M26,45 C38,33 70,33 82,45"),
+                Stroke = new SolidColorBrush(Color.FromRgb(0, 245, 212)),
+                StrokeThickness = 4.0,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            logoCanvas.Children.Add(arc3);
+
+            // 5. Central Beam Beacon Drop (Linear gradient #00F5D4 -> #00BBF9 -> #7B2CBF)
+            var dropGrad = new LinearGradientBrush(
+                Color.FromRgb(0, 245, 212),
+                Color.FromRgb(123, 44, 191),
+                new Point(0.5, 0.0),
+                new Point(0.5, 1.0)
+            );
+            dropGrad.GradientStops.Add(new GradientStop(Color.FromRgb(0, 187, 249), 0.55));
+
+            var beaconDrop = new SystemPath
+            {
+                Data = Geometry.Parse("M54,44 C46,55 42,62 42,70 C42,76.6 47.4,82 54,82 C60.6,82 66,76.6 66,70 C66,62 62,55 54,44 Z"),
+                Fill = dropGrad
+            };
+            logoCanvas.Children.Add(beaconDrop);
+
+            // 6. Center Energy Core Spark (White)
+            var coreSpark = new SystemPath
+            {
+                Data = Geometry.Parse("M54,62 C51.8,62 50,63.8 50,66 C50,69.5 54,74 54,74 C54,74 58,69.5 58,66 C58,63.8 56.2,62 54,62 Z"),
+                Fill = Brushes.White
+            };
+            logoCanvas.Children.Add(coreSpark);
+
+            viewbox.Child = logoCanvas;
+            logoBadge.Child = viewbox;
 
             brandHeader.Children.Add(logoBadge);
 
