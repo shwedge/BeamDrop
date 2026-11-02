@@ -89,6 +89,8 @@ $iconArg = if (Test-Path -LiteralPath $icoPath) { "/win32icon:$icoPath" } else {
     "/nologo" `
     "/target:winexe" `
     "/optimize+" `
+    "/codepage:65001" `
+    "/utf8output" `
     "/out:$targetExe" `
     "/win32manifest:$manifestPath" `
     $iconArg `

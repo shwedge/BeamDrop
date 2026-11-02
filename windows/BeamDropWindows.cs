@@ -1,4 +1,3 @@
-using System.Windows.Media.Animation;
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -18,6 +17,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -573,7 +573,7 @@ namespace BeamDropWindows
             _downloadDir = downloadDir;
             _onTriggerScan = onTriggerScan;
 
-            Title = "BeamDrop â€” Network & Discovery Diagnostics";
+            Title = "BeamDrop — Network & Discovery Diagnostics";
             Width = 630;
             Height = 670;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -617,13 +617,36 @@ namespace BeamDropWindows
                 Margin = new Thickness(0, 0, 14, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            logoBadge.Child = new TextBlock
+            var diagCanvas = new Canvas
             {
-                Text = "ðŸ“¡",
-                FontSize = 22,
+                Width = 24,
+                Height = 24,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            var diagPath1 = new SystemPath
+            {
+                Data = Geometry.Parse("M3,14 A9,9 0 0,1 21,14"),
+                Stroke = Brushes.White,
+                StrokeThickness = 2.0,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            var diagPath2 = new SystemPath
+            {
+                Data = Geometry.Parse("M6,17 A6,6 0 0,1 18,17"),
+                Stroke = Brushes.White,
+                StrokeThickness = 2.0,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            var diagDot = new Ellipse { Width = 4, Height = 4, Fill = Brushes.White };
+            Canvas.SetLeft(diagDot, 10);
+            Canvas.SetTop(diagDot, 18);
+            diagCanvas.Children.Add(diagPath1);
+            diagCanvas.Children.Add(diagPath2);
+            diagCanvas.Children.Add(diagDot);
+            logoBadge.Child = diagCanvas;
             DockPanel.SetDock(logoBadge, Dock.Left);
             headerDock.Children.Add(logoBadge);
 
@@ -687,7 +710,7 @@ namespace BeamDropWindows
             };
             scanBtn.Child = new TextBlock
             {
-                Text = "ðŸ”„ Probe Subnet Now",
+                Text = "Probe Subnet Now",
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 12.5,
                 Foreground = new SolidColorBrush(cyanAccent),
@@ -717,7 +740,7 @@ namespace BeamDropWindows
             };
             copyDiagBtn.Child = new TextBlock
             {
-                Text = "ðŸ“‹ Copy Diagnostics",
+                Text = "Copy Diagnostics",
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 12.5,
                 Foreground = new SolidColorBrush(textCol),
@@ -772,10 +795,10 @@ namespace BeamDropWindows
             var card2 = CreateCard(cardBg, cardBorder);
             var c2Stack = new StackPanel();
             c2Stack.Children.Add(CreateSectionTitle("BeamDrop Continuity Protocol Engines", purpleAccent));
-            AddDetailRow(c2Stack, "High-Speed TCP Socket", "Port " + _tcpPort + " (Active â€¢ 4MB Turbo Socket Window)", cyanAccent, textMuted);
-            AddDetailRow(c2Stack, "UDP Multicast Beacon", "Port " + _udpPort + " (Active â€¢ 2.5s Subnet Broadcast)", cyanAccent, textMuted);
+            AddDetailRow(c2Stack, "High-Speed TCP Socket", "Port " + _tcpPort + " (Active \u2022 4MB Turbo Socket Window)", cyanAccent, textMuted);
+            AddDetailRow(c2Stack, "UDP Multicast Beacon", "Port " + _udpPort + " (Active \u2022 2.5s Subnet Broadcast)", cyanAccent, textMuted);
             AddDetailRow(c2Stack, "Zero-Config mDNS", "_beamdrop._tcp.local (Broadcasting on Subnet)", cyanAccent, textMuted);
-            AddDetailRow(c2Stack, "Security & Handshake", "P2P Token Handshake â€¢ Zero Cloud Relay", textCol, textMuted);
+            AddDetailRow(c2Stack, "Security & Handshake", "P2P Token Handshake \u2022 Zero Cloud Relay", textCol, textMuted);
             card2.Child = c2Stack;
             cardsStack.Children.Add(card2);
 
@@ -936,7 +959,7 @@ namespace BeamDropWindows
                 };
                 var pDock = new DockPanel();
 
-                string glyph = p.Name.Contains("PC") || p.Name.Contains("Windows") ? "ðŸ’» " : "ðŸ“± ";
+                string glyph = p.Name.Contains("PC") || p.Name.Contains("Windows") ? "[PC] " : "[Phone] ";
                 pDock.Children.Add(new TextBlock
                 {
                     Text = glyph + p.Name,
@@ -957,7 +980,7 @@ namespace BeamDropWindows
                 });
                 rightStack.Children.Add(new TextBlock
                 {
-                    Text = "ðŸŸ¢ Connected",
+                    Text = "\u25cf Connected",
                     FontSize = 10.5,
                     Foreground = new SolidColorBrush(Color.FromRgb(34, 197, 94)),
                     VerticalAlignment = VerticalAlignment.Center
@@ -1037,7 +1060,7 @@ namespace BeamDropWindows
         {
             var sb = new StringBuilder();
             sb.AppendLine("=================================================================");
-            sb.AppendLine("  BeamDrop Continuity â€” Network Diagnostic & Topology Report");
+            sb.AppendLine("  BeamDrop Continuity - Network Diagnostic & Topology Report");
             sb.AppendLine("  Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             sb.AppendLine("=================================================================");
             sb.AppendLine("Device Name:       " + _deviceName);
@@ -1048,7 +1071,7 @@ namespace BeamDropWindows
             sb.AppendLine("Discovered Peers:  " + _peers.Count);
             foreach (var kvp in _peers)
             {
-                sb.AppendLine("  â€¢ Peer: " + kvp.Value.Name + " @ " + kvp.Value.Ip + ":" + kvp.Value.Port);
+                sb.AppendLine("  * Peer: " + kvp.Value.Name + " @ " + kvp.Value.Ip + ":" + kvp.Value.Port);
             }
             sb.AppendLine("Download Folder:   " + _downloadDir);
             sb.AppendLine("Storage Status:    " + GetDriveFreeSpace(_downloadDir));
@@ -2130,7 +2153,7 @@ namespace BeamDropWindows
             _sideStack.Children.Add(_navReceiveBtn);
             _sideStack.Children.Add(_navSendBtn);
             _sideStack.Children.Add(_navSettingsBtn);
-            _navHistoryBtn = CreateNavButton("History", "ðŸ•’", -1);
+            _navHistoryBtn = CreateNavButton("History", "\u23f1", -1);
             _navHistoryBtn.MouseLeftButtonUp += (s, e) => OpenHistoryDrawer();
             _sideStack.Children.Add(_navHistoryBtn);
 
@@ -2388,8 +2411,8 @@ namespace BeamDropWindows
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Margin = new Thickness(0, 0, 0, 16)
             };
-            sendTopRight.Children.Add(CreateIconPill("ðŸ•’ Receiving History", () => OpenHistoryDrawer()));
-            sendTopRight.Children.Add(CreateIconPill("â„¹ Network Info", () => ShowNetworkInfoDialog()));
+            sendTopRight.Children.Add(CreateIconPill("Receiving History", () => OpenHistoryDrawer()));
+            sendTopRight.Children.Add(CreateIconPill("Network Info", () => ShowNetworkInfoDialog()));
             container.Children.Add(sendTopRight);
 
             // Selection Header
@@ -5373,16 +5396,23 @@ namespace BeamDropWindows
                 HorizontalAlignment = HorizontalAlignment.Right,
                 ToolTip = "Close History (Esc)"
             };
-            var closeTxt = new TextBlock
+            var closeCanvas = new Canvas
             {
-                Text = "âœ•",
-                FontSize = 13,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(_currentTextPrimary),
+                Width = 12,
+                Height = 12,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            closeBtn.Child = closeTxt;
+            var closePath = new SystemPath
+            {
+                Data = Geometry.Parse("M2,2 L10,10 M10,2 L2,10"),
+                Stroke = new SolidColorBrush(_currentTextPrimary),
+                StrokeThickness = 2.0,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            closeCanvas.Children.Add(closePath);
+            closeBtn.Child = closeCanvas;
             closeBtn.MouseEnter += (s, e) => closeBtn.Background = new SolidColorBrush(Color.FromArgb(120, 239, 68, 68));
             closeBtn.MouseLeave += (s, e) => closeBtn.Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(60, 255, 255, 255) : Color.FromArgb(40, 0, 0, 0));
             closeBtn.MouseLeftButtonUp += (s, e) => CloseHistoryDrawer();
@@ -5434,7 +5464,7 @@ namespace BeamDropWindows
 
             var openFolderBtn = new TextBlock
             {
-                Text = "ðŸ“‚ Open Folder",
+                Text = "Open Folder",
                 FontSize = 11.5,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(Color.FromRgb(58, 228, 204)),
@@ -5449,7 +5479,7 @@ namespace BeamDropWindows
 
             var clearBtn = new TextBlock
             {
-                Text = "ðŸ—‘ Clear All",
+                Text = "Clear All",
                 FontSize = 11.5,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(Color.FromArgb(200, 248, 113, 113)),
@@ -5488,13 +5518,65 @@ namespace BeamDropWindows
                 HorizontalAlignment = HorizontalAlignment.Center
             };
             var emptyStack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-            emptyStack.Children.Add(new TextBlock
+            var emptyIconGrid = new Grid
             {
-                Text = "ðŸ“¡",
-                FontSize = 42,
+                Width = 72,
+                Height = 72,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 12)
-            });
+                Margin = new Thickness(0, 0, 0, 16)
+            };
+            var emptyIconBg = new Border
+            {
+                Width = 72,
+                Height = 72,
+                CornerRadius = new CornerRadius(36),
+                Background = new LinearGradientBrush(
+                    Color.FromArgb(35, 58, 228, 204),
+                    Color.FromArgb(15, 172, 92, 246),
+                    new Point(0, 0),
+                    new Point(1, 1)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(70, 58, 228, 204)),
+                BorderThickness = new Thickness(1.5)
+            };
+            emptyIconGrid.Children.Add(emptyIconBg);
+
+            var emptyCanvas = new Canvas
+            {
+                Width = 40,
+                Height = 40,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var radarPath1 = new SystemPath
+            {
+                Data = Geometry.Parse("M6,20 A14,14 0 0,1 34,20"),
+                Stroke = new SolidColorBrush(Color.FromArgb(130, 58, 228, 204)),
+                StrokeThickness = 2.2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            var radarPath2 = new SystemPath
+            {
+                Data = Geometry.Parse("M11,24 A9,9 0 0,1 29,24"),
+                Stroke = new SolidColorBrush(Color.FromArgb(210, 58, 228, 204)),
+                StrokeThickness = 2.2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            var radarCore = new Ellipse
+            {
+                Width = 8,
+                Height = 8,
+                Fill = new SolidColorBrush(Color.FromRgb(58, 228, 204))
+            };
+            Canvas.SetLeft(radarCore, 16);
+            Canvas.SetTop(radarCore, 27);
+            emptyCanvas.Children.Add(radarPath1);
+            emptyCanvas.Children.Add(radarPath2);
+            emptyCanvas.Children.Add(radarCore);
+            emptyIconGrid.Children.Add(emptyCanvas);
+
+            emptyStack.Children.Add(emptyIconGrid);
             emptyStack.Children.Add(new TextBlock
             {
                 Text = "No Files Received Yet",
@@ -5641,7 +5723,9 @@ namespace BeamDropWindows
             iconBadge.Child = new TextBlock
             {
                 Text = iconGlyph,
-                FontSize = 18,
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
@@ -5655,11 +5739,11 @@ namespace BeamDropWindows
 
             string deviceDisplay = item.DeviceName;
             if (deviceDisplay.Contains("HONOR") || deviceDisplay.Contains("Android") || deviceDisplay.Contains("Phone") || deviceDisplay.Contains("Galaxy"))
-                deviceDisplay = "ðŸ“± " + deviceDisplay;
+                deviceDisplay = "Mobile: " + deviceDisplay;
             else if (deviceDisplay.Contains("VICTUS") || deviceDisplay.Contains("PC") || deviceDisplay.Contains("Laptop") || deviceDisplay.Contains("Windows"))
-                deviceDisplay = "ðŸ’» " + deviceDisplay;
+                deviceDisplay = "PC: " + deviceDisplay;
             else
-                deviceDisplay = "ðŸ“¡ " + deviceDisplay;
+                deviceDisplay = "Device: " + deviceDisplay;
 
             var devPill = new Border
             {
@@ -5698,7 +5782,7 @@ namespace BeamDropWindows
             var metaRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 8) };
             metaRow.Children.Add(new TextBlock
             {
-                Text = string.Format("ðŸ“… {0}  â€¢  ðŸ•’ {1}  â€¢  ðŸ’¾ {2}", item.FormattedDate, item.FormattedExactTime, item.FormattedSize),
+                Text = string.Format("{0}   \u2022   {1}   \u2022   {2}", item.FormattedDate, item.FormattedExactTime, item.FormattedSize),
                 FontSize = 11,
                 Foreground = new SolidColorBrush(_currentTextSecondary)
             });
@@ -5707,7 +5791,7 @@ namespace BeamDropWindows
             // Actions Row: Open, Explorer, Copy Path
             var actionsRow = new StackPanel { Orientation = Orientation.Horizontal };
 
-            var openBtn = CreateMiniActionPill("â–¶ Open", Color.FromArgb(40, 58, 228, 204), Color.FromRgb(58, 228, 204), () =>
+            var openBtn = CreateMiniActionPill("Open", Color.FromArgb(40, 58, 228, 204), Color.FromRgb(58, 228, 204), () =>
             {
                 try
                 {
@@ -5718,7 +5802,7 @@ namespace BeamDropWindows
             });
             actionsRow.Children.Add(openBtn);
 
-            var revealBtn = CreateMiniActionPill("ðŸ“ Explorer", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
+            var revealBtn = CreateMiniActionPill("Show in Folder", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
             {
                 try
                 {
@@ -5729,7 +5813,7 @@ namespace BeamDropWindows
             });
             actionsRow.Children.Add(revealBtn);
 
-            var copyPathBtn = CreateMiniActionPill("ðŸ“‹ Copy Path", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
+            var copyPathBtn = CreateMiniActionPill("Copy Path", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
             {
                 try
                 {
@@ -5802,7 +5886,7 @@ namespace BeamDropWindows
                 case ".gif":
                 case ".bmp":
                 case ".svg":
-                    glyph = "ðŸ–¼ï¸";
+                    glyph = "IMG";
                     c1 = Color.FromRgb(16, 185, 129);
                     c2 = Color.FromRgb(59, 130, 246);
                     break;
@@ -5811,7 +5895,7 @@ namespace BeamDropWindows
                 case ".mov":
                 case ".avi":
                 case ".webm":
-                    glyph = "ðŸŽ¬";
+                    glyph = "VID";
                     c1 = Color.FromRgb(139, 92, 246);
                     c2 = Color.FromRgb(236, 72, 153);
                     break;
@@ -5821,7 +5905,7 @@ namespace BeamDropWindows
                 case ".m4a":
                 case ".aac":
                 case ".ogg":
-                    glyph = "ðŸŽµ";
+                    glyph = "AUD";
                     c1 = Color.FromRgb(244, 63, 94);
                     c2 = Color.FromRgb(251, 146, 60);
                     break;
@@ -5832,7 +5916,7 @@ namespace BeamDropWindows
                 case ".xlsx":
                 case ".pptx":
                 case ".md":
-                    glyph = "ðŸ“„";
+                    glyph = "DOC";
                     c1 = Color.FromRgb(59, 130, 246);
                     c2 = Color.FromRgb(99, 102, 241);
                     break;
@@ -5841,12 +5925,12 @@ namespace BeamDropWindows
                 case ".7z":
                 case ".tar":
                 case ".gz":
-                    glyph = "ðŸ“¦";
+                    glyph = "ZIP";
                     c1 = Color.FromRgb(245, 158, 11);
                     c2 = Color.FromRgb(234, 88, 12);
                     break;
                 default:
-                    glyph = "âš¡";
+                    glyph = "FILE";
                     c1 = Color.FromRgb(58, 228, 204);
                     c2 = Color.FromRgb(172, 92, 246);
                     break;
