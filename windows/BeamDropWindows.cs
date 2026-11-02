@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -1051,7 +1051,15 @@ namespace BeamDropWindows
                 }
                 else
                 {
-                    _trayIcon.Icon = System.Drawing.SystemIcons.Application;
+                    try
+                    {
+                        string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                        _trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath) ?? System.Drawing.SystemIcons.Application;
+                    }
+                    catch
+                    {
+                        _trayIcon.Icon = System.Drawing.SystemIcons.Application;
+                    }
                 }
                 _trayIcon.Text = "BeamDrop Continuity (Sajjad Hossain Mridul)";
                 _trayIcon.Visible = _settings.MinimizeToTray;
@@ -1179,6 +1187,20 @@ namespace BeamDropWindows
                 {
                     Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(icoFile, UriKind.Absolute));
                 }
+                else
+                {
+                    string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                    using (var sysIco = System.Drawing.Icon.ExtractAssociatedIcon(exePath))
+                    {
+                        if (sysIco != null)
+                        {
+                            Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                                sysIco.Handle,
+                                System.Windows.Int32Rect.Empty,
+                                System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+                        }
+                    }
+                }
             }
             catch {}
 
@@ -1262,78 +1284,70 @@ namespace BeamDropWindows
                 ClipToBounds = true
             };
 
-            // 1. Cosmic Gradient Background matching Android ic_launcher_background.xml
+            // 1. Android Brand Gradient Squircle Background
+            var bgGrad = new LinearGradientBrush(
+                Color.FromRgb(58, 228, 204),
+                Color.FromRgb(172, 92, 246),
+                new Point(0, 0),
+                new Point(1, 1)
+            );
+            bgGrad.GradientStops.Add(new GradientStop(Color.FromRgb(58, 228, 204), 0.0));
+            bgGrad.GradientStops.Add(new GradientStop(Color.FromRgb(68, 180, 248), 0.33));
+            bgGrad.GradientStops.Add(new GradientStop(Color.FromRgb(126, 142, 248), 0.68));
+            bgGrad.GradientStops.Add(new GradientStop(Color.FromRgb(172, 92, 246), 1.0));
+
             var bgRect = new System.Windows.Shapes.Rectangle
             {
                 Width = 108,
                 Height = 108,
-                RadiusX = 22,
-                RadiusY = 22,
-                Fill = new LinearGradientBrush(
-                    Color.FromRgb(11, 14, 20),
-                    Color.FromRgb(26, 34, 56),
-                    new Point(0, 0),
-                    new Point(1, 1)
-                )
+                RadiusX = 30,
+                RadiusY = 30,
+                Fill = bgGrad
             };
             logoCanvas.Children.Add(bgRect);
 
-            // 2. Ripple Origin Arc 1 (#7B2CBF)
-            var arc1 = new SystemPath
+            // 2. 3-Node Connected Share Glyph matching Android
+            var shareBars = new SystemPath
             {
-                Data = Geometry.Parse("M38,32 C43,26 65,26 70,32"),
-                Stroke = new SolidColorBrush(Color.FromRgb(123, 44, 191)),
-                StrokeThickness = 3.5,
+                Data = Geometry.Parse("M70,35 L38,54 L70,73"),
+                Stroke = new SolidColorBrush(Color.FromRgb(11, 18, 30)),
+                StrokeThickness = 7.0,
+                StrokeLineJoin = PenLineJoin.Round,
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap = PenLineCap.Round
             };
-            logoCanvas.Children.Add(arc1);
+            logoCanvas.Children.Add(shareBars);
 
-            // 3. Ripple Origin Arc 2 (#9D4EDD)
-            var arc2 = new SystemPath
+            var glyphColor = new SolidColorBrush(Color.FromRgb(11, 18, 30));
+            var leftNode = new System.Windows.Shapes.Ellipse
             {
-                Data = Geometry.Parse("M32,38 C40,29 68,29 76,38"),
-                Stroke = new SolidColorBrush(Color.FromRgb(157, 78, 221)),
-                StrokeThickness = 3.5,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round
+                Width = 21,
+                Height = 21,
+                Fill = glyphColor
             };
-            logoCanvas.Children.Add(arc2);
+            Canvas.SetLeft(leftNode, 38 - 10.5);
+            Canvas.SetTop(leftNode, 54 - 10.5);
+            logoCanvas.Children.Add(leftNode);
 
-            // 4. Primary Ripple Arc 3 (#00F5D4)
-            var arc3 = new SystemPath
+            var trNode = new System.Windows.Shapes.Ellipse
             {
-                Data = Geometry.Parse("M26,45 C38,33 70,33 82,45"),
-                Stroke = new SolidColorBrush(Color.FromRgb(0, 245, 212)),
-                StrokeThickness = 4.0,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round
+                Width = 21,
+                Height = 21,
+                Fill = glyphColor
             };
-            logoCanvas.Children.Add(arc3);
+            Canvas.SetLeft(trNode, 70 - 10.5);
+            Canvas.SetTop(trNode, 35 - 10.5);
+            logoCanvas.Children.Add(trNode);
 
-            // 5. Central Beam Beacon Drop (Linear gradient #00F5D4 -> #00BBF9 -> #7B2CBF)
-            var dropGrad = new LinearGradientBrush(
-                Color.FromRgb(0, 245, 212),
-                Color.FromRgb(123, 44, 191),
-                new Point(0.5, 0.0),
-                new Point(0.5, 1.0)
-            );
-            dropGrad.GradientStops.Add(new GradientStop(Color.FromRgb(0, 187, 249), 0.55));
-
-            var beaconDrop = new SystemPath
+            var brNode = new System.Windows.Shapes.Ellipse
             {
-                Data = Geometry.Parse("M54,44 C46,55 42,62 42,70 C42,76.6 47.4,82 54,82 C60.6,82 66,76.6 66,70 C66,62 62,55 54,44 Z"),
-                Fill = dropGrad
+                Width = 21,
+                Height = 21,
+                Fill = glyphColor
             };
-            logoCanvas.Children.Add(beaconDrop);
-
-            // 6. Center Energy Core Spark (White)
-            var coreSpark = new SystemPath
-            {
-                Data = Geometry.Parse("M54,62 C51.8,62 50,63.8 50,66 C50,69.5 54,74 54,74 C54,74 58,69.5 58,66 C58,63.8 56.2,62 54,62 Z"),
-                Fill = Brushes.White
-            };
-            logoCanvas.Children.Add(coreSpark);
+            Canvas.SetLeft(brNode, 70 - 10.5);
+            Canvas.SetTop(brNode, 73 - 10.5);
+            logoCanvas.Children.Add(brNode);
 
             viewbox.Child = logoCanvas;
             logoBadge.Child = viewbox;
