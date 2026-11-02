@@ -323,6 +323,346 @@ namespace BeamDropWindows
         }
     }
 
+    public class SupportDonateDialog : Window
+    {
+        public SupportDonateDialog(bool isDark)
+        {
+            Title = "Support & Donate — BeamDrop Continuity";
+            Width = 530;
+            Height = 475;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            ResizeMode = ResizeMode.NoResize;
+            WindowStyle = WindowStyle.ToolWindow;
+
+            Color bg = isDark ? Color.FromRgb(11, 21, 18) : Color.FromRgb(245, 249, 247);
+            Color textCol = isDark ? Color.FromRgb(236, 253, 245) : Color.FromRgb(15, 41, 34);
+            Color textMuted = isDark ? Color.FromRgb(153, 178, 170) : Color.FromRgb(90, 115, 107);
+            Color cardBg = isDark ? Color.FromArgb(190, 20, 36, 32) : Color.FromArgb(220, 255, 255, 255);
+            Color cardBorder = isDark ? Color.FromRgb(42, 71, 64) : Color.FromRgb(208, 227, 220);
+            Color mintAccent = Color.FromRgb(0, 245, 212);
+
+            Background = new SolidColorBrush(bg);
+            Foreground = new SolidColorBrush(textCol);
+            FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
+
+            var stack = new StackPanel { Margin = new Thickness(26, 20, 26, 22) };
+
+            // Title row with Heart
+            var headerRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            headerRow.Children.Add(new TextBlock
+            {
+                Text = "❤️",
+                FontSize = 22,
+                Margin = new Thickness(0, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            headerRow.Children.Add(new TextBlock
+            {
+                Text = "Support & Donate",
+                FontSize = 20,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(textCol),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            stack.Children.Add(headerRow);
+
+            // Intro text matching Android BeamSettingsView
+            stack.Children.Add(new TextBlock
+            {
+                Text = "BeamDrop is built with passion by Sajjad Hossain Mridul and the BeamDrop Staff — 100% free, ad-free, and with zero cloud tracking.",
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(textMuted),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 14),
+                LineHeight = 18
+            });
+
+            // Frosted Glass Card for Ways to Support
+            var waysCard = new Border
+            {
+                Background = new SolidColorBrush(cardBg),
+                BorderBrush = new SolidColorBrush(cardBorder),
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 0, 18)
+            };
+            var waysStack = new StackPanel();
+            waysStack.Children.Add(new TextBlock
+            {
+                Text = "Ways to Support Sajjad Hossain Mridul:",
+                FontSize = 13.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(mintAccent),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+            waysStack.Children.Add(new TextBlock
+            {
+                Text = "• Sponsor Development: github.com/sponsors/SajjadHossainMridul\n• Buy a Coffee for the Staff: buymeacoffee.com/sajjadhossainmridul\n• Star & Share BeamDrop with friends on Android & Windows!",
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(textCol),
+                LineHeight = 20,
+                TextWrapping = TextWrapping.Wrap
+            });
+            waysCard.Child = waysStack;
+            stack.Children.Add(waysCard);
+
+            // Donation action buttons
+            var btnGrid = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 12) };
+
+            var bmcBtn = new Border
+            {
+                Height = 40,
+                Margin = new Thickness(0, 0, 6, 0),
+                CornerRadius = new CornerRadius(10),
+                Background = new SolidColorBrush(Color.FromRgb(255, 183, 3)),
+                Cursor = Cursors.Hand
+            };
+            var bmcText = new TextBlock
+            {
+                Text = "☕ Buy Me a Coffee",
+                FontWeight = FontWeights.Bold,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(15, 23, 42)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            bmcBtn.Child = bmcText;
+            bmcBtn.MouseLeftButtonUp += (s, e) => LaunchUrl("https://buymeacoffee.com/sajjadhossainmridul");
+            btnGrid.Children.Add(bmcBtn);
+
+            var ghBtn = new Border
+            {
+                Height = 40,
+                Margin = new Thickness(6, 0, 0, 0),
+                CornerRadius = new CornerRadius(10),
+                Background = new SolidColorBrush(Color.FromRgb(219, 39, 119)),
+                Cursor = Cursors.Hand
+            };
+            var ghText = new TextBlock
+            {
+                Text = "❤️ GitHub Sponsors",
+                FontWeight = FontWeights.Bold,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Colors.White),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            ghBtn.Child = ghText;
+            ghBtn.MouseLeftButtonUp += (s, e) => LaunchUrl("https://github.com/sponsors/SajjadHossainMridul");
+            btnGrid.Children.Add(ghBtn);
+
+            stack.Children.Add(btnGrid);
+
+            // Secondary row: Copy links & Thank you
+            var bottomDock = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
+
+            var copyBtn = new Border
+            {
+                Height = 34,
+                Padding = new Thickness(14, 0, 14, 0),
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(isDark ? Color.FromRgb(28, 49, 44) : Color.FromRgb(230, 235, 232)),
+                BorderBrush = new SolidColorBrush(cardBorder),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand
+            };
+            var copyText = new TextBlock
+            {
+                Text = "📋 Copy Donation Links",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(textCol),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            copyBtn.Child = copyText;
+            copyBtn.MouseLeftButtonUp += (s, e) =>
+            {
+                try
+                {
+                    Clipboard.SetText("Buy Me a Coffee: https://buymeacoffee.com/sajjadhossainmridul\nGitHub Sponsors: https://github.com/sponsors/SajjadHossainMridul");
+                    copyText.Text = "✓ Links Copied!";
+                }
+                catch { }
+            };
+            DockPanel.SetDock(copyBtn, Dock.Left);
+            bottomDock.Children.Add(copyBtn);
+
+            var thankBtn = new Border
+            {
+                Width = 115,
+                Height = 34,
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(mintAccent),
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            var thankText = new TextBlock
+            {
+                Text = "Thank You ♥",
+                FontWeight = FontWeights.Bold,
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(Color.FromRgb(15, 23, 42)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            thankBtn.Child = thankText;
+            thankBtn.MouseLeftButtonUp += (s, e) => { DialogResult = true; Close(); };
+            DockPanel.SetDock(thankBtn, Dock.Right);
+            bottomDock.Children.Add(thankBtn);
+
+            stack.Children.Add(bottomDock);
+            Content = stack;
+
+            SourceInitialized += (s, e) =>
+            {
+                var helper = new WindowInteropHelper(this);
+                MainWindow.ApplyHwndTitleBar(helper.Handle, isDark);
+            };
+        }
+
+        private static void LaunchUrl(string url)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                try { Process.Start(url); } catch { }
+            }
+        }
+    }
+
+    public class AboutStaffDialog : Window
+    {
+        public AboutStaffDialog(bool isDark)
+        {
+            Title = "About & Staff — BeamDrop Continuity";
+            Width = 530;
+            Height = 490;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            ResizeMode = ResizeMode.NoResize;
+            WindowStyle = WindowStyle.ToolWindow;
+
+            Color bg = isDark ? Color.FromRgb(11, 21, 18) : Color.FromRgb(245, 249, 247);
+            Color textCol = isDark ? Color.FromRgb(236, 253, 245) : Color.FromRgb(15, 41, 34);
+            Color textMuted = isDark ? Color.FromRgb(153, 178, 170) : Color.FromRgb(90, 115, 107);
+            Color cardBg = isDark ? Color.FromArgb(190, 20, 36, 32) : Color.FromArgb(220, 255, 255, 255);
+            Color cardBorder = isDark ? Color.FromRgb(42, 71, 64) : Color.FromRgb(208, 227, 220);
+            Color mintAccent = Color.FromRgb(0, 245, 212);
+
+            Background = new SolidColorBrush(bg);
+            Foreground = new SolidColorBrush(textCol);
+            FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI");
+
+            var stack = new StackPanel { Margin = new Thickness(26, 20, 26, 22) };
+
+            // Title row
+            var headerRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            headerRow.Children.Add(new TextBlock
+            {
+                Text = "💧",
+                FontSize = 22,
+                Margin = new Thickness(0, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            var titleStack = new StackPanel();
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = "About BeamDrop",
+                FontSize = 19,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(textCol)
+            });
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = "Created & Developed by Sajjad Hossain Mridul",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(mintAccent)
+            });
+            headerRow.Children.Add(titleStack);
+            stack.Children.Add(headerRow);
+
+            // Intro text matching Android
+            stack.Children.Add(new TextBlock
+            {
+                Text = "BeamDrop is a high-speed, zero-cloud local file sharing and continuity ecosystem for Android and Windows 10/11 featuring iOS 26 Clear Glass aesthetics, simultaneous directional swipe waves, QR & NFC pairing, and 100+ Mbps local Wi-Fi throughput.",
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(textMuted),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 14),
+                LineHeight = 18
+            });
+
+            // Frosted Glass Card for Staff & Core Team
+            var staffCard = new Border
+            {
+                Background = new SolidColorBrush(cardBg),
+                BorderBrush = new SolidColorBrush(cardBorder),
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 0, 20)
+            };
+            var staffStack = new StackPanel();
+            staffStack.Children.Add(new TextBlock
+            {
+                Text = "Our Staff & Core Team",
+                FontSize = 13.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(mintAccent),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+            staffStack.Children.Add(new TextBlock
+            {
+                Text = "• Sajjad Hossain Mridul — Founder, Lead Architect & Principal Developer\n• BeamDrop Systems Engineering Staff — High-Speed TCP/UDP Socket Engine\n• BeamDrop Liquid Glass Design Staff — iOS 26 Clear Glass & Continuity\n• BeamDrop Security & QA Staff — Local LAN Verification & Code Signing",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(textCol),
+                LineHeight = 20,
+                TextWrapping = TextWrapping.Wrap
+            });
+            staffCard.Child = staffStack;
+            stack.Children.Add(staffCard);
+
+            // Close button
+            var closeBtn = new Border
+            {
+                Width = 110,
+                Height = 34,
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(mintAccent),
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            closeBtn.Child = new TextBlock
+            {
+                Text = "Close",
+                FontWeight = FontWeights.Bold,
+                FontSize = 12.5,
+                Foreground = new SolidColorBrush(Color.FromRgb(15, 23, 42)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            closeBtn.MouseLeftButtonUp += (s, e) => { DialogResult = true; Close(); };
+            stack.Children.Add(closeBtn);
+
+            Content = stack;
+
+            SourceInitialized += (s, e) =>
+            {
+                var helper = new WindowInteropHelper(this);
+                MainWindow.ApplyHwndTitleBar(helper.Handle, isDark);
+            };
+        }
+    }
+
+
 
     public static class ModernFolderPicker
     {
@@ -625,24 +965,18 @@ namespace BeamDropWindows
             ApplyTitleBarTheme(_isDarkMode);
         }
 
-        private void ApplyTitleBarTheme(bool dark)
+        public static void ApplyHwndTitleBar(IntPtr hwnd, bool dark)
         {
             try
             {
-                var helper = new WindowInteropHelper(this);
-                IntPtr hwnd = helper.Handle;
                 if (hwnd == IntPtr.Zero) return;
-
                 int useDark = dark ? 1 : 0;
                 if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int)) != 0)
                 {
                     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useDark, sizeof(int));
                 }
 
-                // Windows 11 custom caption color:
-                // 0x00BBGGRR format
-                // Dark: #0B1512 -> 0x0012150B
-                // Light: #F5F9F7 -> 0x00F7F9F5
+                // Windows 11 custom caption color (0x00BBGGRR format)
                 int captionColor = dark ? 0x0012150B : 0x00F7F9F5;
                 DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
 
@@ -650,6 +984,12 @@ namespace BeamDropWindows
                 DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref textColor, sizeof(int));
             }
             catch { }
+        }
+
+        private void ApplyTitleBarTheme(bool dark)
+        {
+            var helper = new WindowInteropHelper(this);
+            ApplyHwndTitleBar(helper.Handle, dark);
         }
 
         private void ApplyTheme(bool dark)
@@ -978,6 +1318,27 @@ namespace BeamDropWindows
                 Margin = new Thickness(8, 28, 0, 0)
             };
             _sideStack.Children.Add(_authorInfoText);
+
+            var donateSidebarBtn = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(Color.FromArgb(35, 0, 245, 212)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(90, 0, 245, 212)),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(10, 6, 10, 6),
+                Margin = new Thickness(6, 14, 6, 0),
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            donateSidebarBtn.Child = new TextBlock
+            {
+                Text = "❤️ Support & Donate",
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(_currentTextPrimary)
+            };
+            donateSidebarBtn.MouseLeftButtonUp += (s, e) => ShowSupportAndDonateDialog();
+            _sideStack.Children.Add(donateSidebarBtn);
 
             _sidebar.Child = _sideStack;
             Grid.SetColumn(_sidebar, 0);
@@ -1406,7 +1767,16 @@ namespace BeamDropWindows
             AddSettingsToggleRow(sysRows, "Turbo Transfer Acceleration (100+ MB/s, 4MB TCP Windows)", _settings.TurboSpeedMode, val => { _settings.TurboSpeedMode = val; _settings.Save(); });
             stack.Children.Add(sysCard);
 
-            // 5. Publisher & Authenticity Card
+            // 5. Support BeamDrop & Community Card (matches Android Settings)
+            StackPanel supportRows;
+            var supportCard = CreateSettingsSectionCard("Support BeamDrop & Staff", out supportRows);
+            AddSettingsButtonRow(supportRows, "Support Sajjad Hossain Mridul & Staff", "❤️ Donate", () => ShowSupportAndDonateDialog(), true);
+            AddSettingsButtonRow(supportRows, "Buy a Coffee for Staff", "☕ buymeacoffee.com", () => LaunchUrl("https://buymeacoffee.com/sajjadhossainmridul"));
+            AddSettingsButtonRow(supportRows, "Sponsor Development on GitHub", "★ github.com/sponsors", () => LaunchUrl("https://github.com/sponsors/SajjadHossainMridul"));
+            AddSettingsButtonRow(supportRows, "About BeamDrop & Core Staff", "👥 View Staff", () => ShowAboutStaffDialog());
+            stack.Children.Add(supportCard);
+
+            // 6. Publisher & Authenticity Card
             StackPanel pubRows;
             var pubCard = CreateSettingsSectionCard("Publisher & Application Identity", out pubRows);
             AddSettingsBadgeRow(pubRows, "Publisher", "Sajjad Hossain Mridul");
@@ -3926,6 +4296,85 @@ namespace BeamDropWindows
 
             DockPanel.SetDock(rightStack, Dock.Right);
             dock.Children.Add(rightStack);
+            parent.Children.Add(dock);
+        }
+
+
+        public static void LaunchUrl(string url)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                try { Process.Start(url); } catch { }
+            }
+        }
+
+        public void ShowSupportAndDonateDialog()
+        {
+            try
+            {
+                var dlg = new SupportDonateDialog(_isDarkMode);
+                dlg.Owner = this;
+                dlg.ShowDialog();
+            }
+            catch (Exception)
+            {
+                LaunchUrl("https://buymeacoffee.com/sajjadhossainmridul");
+            }
+        }
+
+        public void ShowAboutStaffDialog()
+        {
+            try
+            {
+                var dlg = new AboutStaffDialog(_isDarkMode);
+                dlg.Owner = this;
+                dlg.ShowDialog();
+            }
+            catch (Exception) { }
+        }
+
+        private void AddSettingsButtonRow(StackPanel parent, string label, string buttonText, Action onClick, bool isPrimary = false)
+        {
+            var dock = new DockPanel { Margin = new Thickness(0, 6, 0, 6) };
+            dock.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                VerticalAlignment = VerticalAlignment.Center,
+                MaxWidth = 360,
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var btn = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(isPrimary ? _currentMintAccent : Color.FromArgb(40, 128, 128, 128)),
+                BorderBrush = new SolidColorBrush(isPrimary ? Colors.Transparent : _currentCardBorder),
+                BorderThickness = new Thickness(isPrimary ? 0 : 1),
+                Padding = new Thickness(14, 6, 14, 6),
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            btn.Child = new TextBlock
+            {
+                Text = buttonText,
+                FontSize = 11.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(isPrimary ? Color.FromRgb(15, 23, 42) : _currentTextPrimary)
+            };
+            btn.MouseLeftButtonUp += (s, e) => onClick();
+
+            DockPanel.SetDock(btn, Dock.Right);
+            dock.Children.Add(btn);
             parent.Children.Add(dock);
         }
 
