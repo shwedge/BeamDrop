@@ -770,7 +770,7 @@ fun BeamSettingsView(
                             color = NeonTeal
                         )
                         Text(
-                            text = "• Sponsor Development: github.com/sponsors/SajjadHossainMridul\n" +
+                            text = "• Sponsor Development: github.com/sponsors/shwedge\n" +
                                 "• Buy a Coffee for the Staff: buymeacoffee.com/sajjadhossainmridul\n" +
                                 "• Star & Share BeamDrop with friends on Android & Windows!",
                             fontSize = 12.sp,

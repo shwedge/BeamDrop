@@ -398,7 +398,7 @@ namespace BeamDropWindows
             });
             waysStack.Children.Add(new TextBlock
             {
-                Text = "• Sponsor Development: github.com/sponsors/SajjadHossainMridul\n• Buy a Coffee for the Staff: buymeacoffee.com/sajjadhossainmridul\n• Star & Share BeamDrop with friends on Android & Windows!",
+                Text = "• Sponsor Development: github.com/sponsors/shwedge\n• Buy a Coffee for the Staff: buymeacoffee.com/sajjadhossainmridul\n• Star & Share BeamDrop with friends on Android & Windows!",
                 FontSize = 12.5,
                 Foreground = new SolidColorBrush(textCol),
                 LineHeight = 20,
@@ -449,7 +449,7 @@ namespace BeamDropWindows
                 VerticalAlignment = VerticalAlignment.Center
             };
             ghBtn.Child = ghText;
-            ghBtn.MouseLeftButtonUp += (s, e) => LaunchUrl("https://github.com/sponsors/SajjadHossainMridul");
+            ghBtn.MouseLeftButtonUp += (s, e) => LaunchUrl("https://github.com/sponsors/shwedge");
             btnGrid.Children.Add(ghBtn);
 
             stack.Children.Add(btnGrid);
@@ -480,7 +480,7 @@ namespace BeamDropWindows
             {
                 try
                 {
-                    Clipboard.SetText("Buy Me a Coffee: https://buymeacoffee.com/sajjadhossainmridul\nGitHub Sponsors: https://github.com/sponsors/SajjadHossainMridul");
+                    Clipboard.SetText("Buy Me a Coffee: https://buymeacoffee.com/sajjadhossainmridul\nGitHub Sponsors: https://github.com/sponsors/shwedge");
                     copyText.Text = "✓ Links Copied!";
                 }
                 catch { }
@@ -1772,7 +1772,7 @@ namespace BeamDropWindows
             var supportCard = CreateSettingsSectionCard("Support BeamDrop & Staff", out supportRows);
             AddSettingsButtonRow(supportRows, "Support Sajjad Hossain Mridul & Staff", "❤️ Donate", () => ShowSupportAndDonateDialog(), true);
             AddSettingsButtonRow(supportRows, "Buy a Coffee for Staff", "☕ buymeacoffee.com", () => LaunchUrl("https://buymeacoffee.com/sajjadhossainmridul"));
-            AddSettingsButtonRow(supportRows, "Sponsor Development on GitHub", "★ github.com/sponsors", () => LaunchUrl("https://github.com/sponsors/SajjadHossainMridul"));
+            AddSettingsButtonRow(supportRows, "Sponsor Development on GitHub", "★ github.com/sponsors", () => LaunchUrl("https://github.com/sponsors/shwedge"));
             AddSettingsButtonRow(supportRows, "About BeamDrop & Core Staff", "👥 View Staff", () => ShowAboutStaffDialog());
             stack.Children.Add(supportCard);
 
