@@ -4,14 +4,14 @@ title BeamDrop Continuity Desktop - Publisher Sajjad Hossain
 color 0B
 
 echo ============================================================================
-echo   BeamDrop Continuity Engine v2.4.0.0 for Windows 10 and 11
-echo   Publisher: Sajjad Hossain [sajjadtheacid@gmail.com]
+echo   BeamDrop Continuity Engine v2.5.0.0 for Windows 10 and 11
+echo   Publisher: Sajjad Hossain Mridul [sajjadtheacid@gmail.com]
 echo ============================================================================
 echo.
 
 cd /d "%~dp0"
 
-set "INSTALL_DIR=%LOCALAPPDATA%\Programs\Sajjad Hossain\BeamDrop"
+set "INSTALL_DIR=%LOCALAPPDATA%\Programs\Sajjad Hossain Mridul\BeamDrop"
 
 echo [1/3] Removing Mark-of-the-Web Zone.Identifier blocks...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '%~dp0' -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1

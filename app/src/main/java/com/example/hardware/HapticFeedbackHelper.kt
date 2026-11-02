@@ -40,10 +40,10 @@ class HapticFeedbackHelper(private val context: Context) {
     }
 
     /**
-     * Gentle rhythmic pulse during file streaming
+     * Intentionally no-op during active file streaming to prevent continuous actuator heat and battery drain.
      */
     fun onTransferChunkTick() {
-        vibrate(15, 40)
+        // No continuous vibration during streaming
     }
 
     /**

@@ -1,17 +1,17 @@
 @echo off
 setlocal EnableDelayedExpansion
-title BeamDrop Continuity Desktop - Publisher Sajjad H0ssain
+title BeamDrop Continuity Desktop - Publisher Sajjad Hossain
 color 0B
 
 echo ============================================================================
-echo   BeamDrop Continuity Engine v2.4.0.0 for Windows 10 and 11
-echo   Publisher: Sajjad H0ssain [sajjadtheacid@gmail.com]
+echo   BeamDrop Continuity Engine v2.5.0.0 for Windows 10 and 11
+echo   Publisher: Sajjad Hossain Mridul [sajjadtheacid@gmail.com]
 echo ============================================================================
 echo.
 
 cd /d "%~dp0"
 
-set "INSTALL_DIR=%LOCALAPPDATA%\Programs\Sajjad H0ssain\BeamDrop"
+set "INSTALL_DIR=%LOCALAPPDATA%\Programs\Sajjad Hossain Mridul\BeamDrop"
 
 echo [1/3] Removing Mark-of-the-Web Zone.Identifier blocks...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '%~dp0' -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
@@ -20,7 +20,7 @@ if exist "%INSTALL_DIR%\BeamDrop.exe" goto :LAUNCH_INSTALLED
 if exist "%~dp0BeamDropApp.exe" goto :LAUNCH_APP
 if exist "%~dp0BeamDrop.exe" goto :LAUNCH_EXE
 
-echo [2/3] Compiling native 64-bit WPF BeamDrop.exe - Publisher Sajjad H0ssain...
+echo [2/3] Compiling native 64-bit WPF BeamDrop.exe with Logo - Publisher Sajjad Hossain...
 set "CSC_PATH=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if exist "%CSC_PATH%" goto :FOUND_CSC
 set "CSC_PATH=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe"
@@ -37,13 +37,18 @@ set "WPF_DIR=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\WPF"
 :COMPILE_NOW
 set "MANIFEST_ARG="
 if exist "%~dp0BeamDrop.exe.manifest" set "MANIFEST_ARG=/win32manifest:"%~dp0BeamDrop.exe.manifest""
+if exist "%~dp0BeamDrop.manifest" set "MANIFEST_ARG=/win32manifest:"%~dp0BeamDrop.manifest""
 
-"%CSC_PATH%" /nologo /target:winexe /out:"%~dp0BeamDrop.exe" /Platform:anycpu /optimize+ %MANIFEST_ARG% /r:"%WPF_DIR%\PresentationCore.dll" /r:"%WPF_DIR%\PresentationFramework.dll" /r:"%WPF_DIR%\WindowsBase.dll" /r:System.Xaml.dll /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Net.Http.dll "%~dp0BeamDropWindows.cs"
+set "ICON_ARG="
+if exist "%~dp0BeamDrop.ico" set "ICON_ARG=/win32icon:"%~dp0BeamDrop.ico""
+
+"%CSC_PATH%" /nologo /target:winexe /out:"%~dp0BeamDrop.exe" /Platform:anycpu /optimize+ %MANIFEST_ARG% %ICON_ARG% /r:"%WPF_DIR%\PresentationCore.dll" /r:"%WPF_DIR%\PresentationFramework.dll" /r:"%WPF_DIR%\WindowsBase.dll" /r:System.Xaml.dll /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Net.Http.dll "%~dp0BeamDropWindows.cs"
 if errorlevel 1 goto :BUILD_FAILED
 
 copy /Y "%~dp0BeamDrop.exe" "%~dp0BeamDropApp.exe" >nul 2>&1
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 copy /Y "%~dp0BeamDrop.exe" "%INSTALL_DIR%\BeamDrop.exe" >nul 2>&1
+if exist "%~dp0BeamDrop.ico" copy /Y "%~dp0BeamDrop.ico" "%INSTALL_DIR%\BeamDrop.ico" >nul 2>&1
 goto :LAUNCH_EXE
 
 :LAUNCH_INSTALLED

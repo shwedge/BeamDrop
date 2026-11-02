@@ -45,8 +45,19 @@ class WebShareServer(
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val activeTransferSockets = java.util.concurrent.ConcurrentHashMap.newKeySet<Socket>()
+    @Volatile
+    private var cancelWebTransfersRequested: Boolean = false
     var isRunning: Boolean = false
         private set
+
+    fun cancelActiveWebTransfers() {
+        cancelWebTransfersRequested = true
+        activeTransferSockets.forEach { sock ->
+            try { sock.close() } catch (_: Exception) {}
+        }
+        activeTransferSockets.clear()
+    }
 
     fun start() {
         if (isRunning) return
@@ -169,10 +180,15 @@ class WebShareServer(
                     serveAssetFile(rawOut, "BeamDrop.py", "text/x-python", "BeamDrop.py")
                 }
                 method == "GET" && rawPath.startsWith("/download") -> {
-                    handleDownload(rawPath, rawOut)
+                    handleDownload(rawPath, rawOut, socket)
                 }
                 method == "POST" && rawPath.startsWith("/upload") -> {
-                    handleUpload(rawPath, rawIn, contentLength, rawOut, socket.inetAddress.hostAddress ?: "Windows PC")
+                    handleUpload(rawPath, rawIn, contentLength, rawOut, socket.inetAddress.hostAddress ?: "Windows PC", socket)
+                }
+                (method == "POST" || method == "GET") && rawPath.startsWith("/api/cancel") -> {
+                    cancelActiveWebTransfers()
+                    val json = """{"cancelled":true}"""
+                    sendResponse(rawOut, 200, "OK", "application/json", json.toByteArray(StandardCharsets.UTF_8))
                 }
                 method == "OPTIONS" -> {
                     sendCorsPreflight(rawOut)
@@ -195,10 +211,10 @@ class WebShareServer(
         val phoneIp = getLocalIp()
         val batScript = buildString {
             append("@echo off\r\n")
-            append("title BeamDrop Native Windows App Setup and Launcher - Published by Sajjad Hossain\r\n")
+            append("title BeamDrop Native Windows App Setup and Launcher - Developed by Sajjad Hossain Mridul\r\n")
             append("echo ============================================================================\r\n")
             append("echo   BeamDrop Continuity - Native Windows Desktop App (.EXE) Installer\r\n")
-            append("echo   Publisher: Sajjad Hossain\r\n")
+            append("echo   Developer: Sajjad Hossain Mridul\r\n")
             append("echo   Connected Phone: $deviceName ($phoneIp)\r\n")
             append("echo ============================================================================\r\n")
             append("echo.\r\n")
@@ -211,7 +227,7 @@ class WebShareServer(
             append("if not exist \"%CSC_PATH%\" set \"CSC_PATH=%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe\"\r\n")
             append("set \"WPF_DIR=%WINDIR%\\Microsoft.NET\\Framework64\\v4.0.30319\\WPF\"\r\n")
             append("if not exist \"%WPF_DIR%\" set \"WPF_DIR=%WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\WPF\"\r\n")
-            append("echo [2/3] Compiling hardware-accelerated native BeamDrop.exe - Publisher Sajjad Hossain...\r\n")
+            append("echo [2/3] Compiling hardware-accelerated native BeamDrop.exe - Developer Sajjad Hossain Mridul...\r\n")
             append("\"%CSC_PATH%\" /nologo /target:winexe /optimize+ /out:\"BeamDrop.exe\" /r:System.dll /r:System.Core.dll /r:System.Xaml.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Net.Http.dll /r:\"%WPF_DIR%\\PresentationFramework.dll\" /r:\"%WPF_DIR%\\PresentationCore.dll\" /r:\"%WPF_DIR%\\WindowsBase.dll\" \"BeamDropWindows.cs\"\r\n")
             append("if not exist \"BeamDrop.exe\" goto :ERR\r\n")
             append("echo [3/3] Launching BeamDrop.exe...\r\n")
@@ -275,8 +291,12 @@ class WebShareServer(
         input: InputStream,
         contentLength: Long,
         out: OutputStream,
-        clientIp: String
+        clientIp: String,
+        socket: Socket
     ) {
+        var targetFile: File? = null
+        cancelWebTransfersRequested = false
+        activeTransferSockets.add(socket)
         try {
             val queryIdx = path.indexOf('?')
             var fileName = "Upload_${System.currentTimeMillis()}"
@@ -295,15 +315,17 @@ class WebShareServer(
                 "BeamDrop"
             ).apply { if (!exists()) mkdirs() }
 
-            val targetFile = File(downloadsDir, fileName)
-            val fos = FileOutputStream(targetFile)
+            val destFile = File(downloadsDir, fileName)
+            targetFile = destFile
+            val fos = FileOutputStream(destFile)
 
-            val buffer = ByteArray(64 * 1024)
+            val buffer = ByteArray(256 * 1024)
             var bytesRemaining = contentLength
             var totalRead = 0L
 
             if (contentLength > 0) {
                 while (bytesRemaining > 0) {
+                    if (cancelWebTransfersRequested) break
                     val toRead = bytesRemaining.coerceAtMost(buffer.size.toLong()).toInt()
                     val read = input.read(buffer, 0, toRead)
                     if (read == -1) break
@@ -312,8 +334,8 @@ class WebShareServer(
                     totalRead += read
                 }
             } else {
-                var read: Int
-                while (input.read(buffer).also { read = it } != -1) {
+                var read = 0
+                while (!cancelWebTransfersRequested && input.read(buffer).also { read = it } != -1) {
                     fos.write(buffer, 0, read)
                     totalRead += read
                 }
@@ -322,18 +344,31 @@ class WebShareServer(
             fos.flush()
             fos.close()
 
-            onFileReceived(targetFile, totalRead, "Windows PC ($clientIp)")
+            if (cancelWebTransfersRequested || (contentLength > 0 && bytesRemaining > 0)) {
+                try { if (destFile.exists()) destFile.delete() } catch (_: Exception) {}
+                val resp = """{"success":false,"cancelled":true}"""
+                sendResponse(out, 499, "Client Closed Request", "application/json", resp.toByteArray(StandardCharsets.UTF_8))
+                return
+            }
+
+            RealTransferEngine.persistReceivedFileToDeviceStorage(context, destFile)
+            onFileReceived(destFile, totalRead, "Windows PC ($clientIp)")
 
             val resp = """{"success":true,"file":"${escapeJson(fileName)}","size":$totalRead}"""
             sendResponse(out, 200, "OK", "application/json", resp.toByteArray(StandardCharsets.UTF_8))
         } catch (e: Exception) {
+            try { targetFile?.let { if (it.exists()) it.delete() } } catch (_: Exception) {}
             Log.e(tag, "Upload processing failed", e)
             val err = """{"success":false,"error":"${escapeJson(e.message ?: "Failed")}"}"""
-            sendResponse(out, 500, "Internal Server Error", "application/json", err.toByteArray())
+            try {
+                sendResponse(out, 500, "Internal Server Error", "application/json", err.toByteArray())
+            } catch (_: Exception) {}
+        } finally {
+            activeTransferSockets.remove(socket)
         }
     }
 
-    private fun handleDownload(path: String, out: OutputStream) {
+    private fun handleDownload(path: String, out: OutputStream, socket: Socket) {
         val queryIdx = path.indexOf('?')
         var targetId: String? = null
         if (queryIdx != -1) {
@@ -355,6 +390,8 @@ class WebShareServer(
             return
         }
 
+        cancelWebTransfersRequested = false
+        activeTransferSockets.add(socket)
         try {
             val fileStream: InputStream = if (item.uri.startsWith("content://")) {
                 context.contentResolver.openInputStream(Uri.parse(item.uri)) ?: throw Exception("Cannot open URI")
@@ -373,15 +410,16 @@ class WebShareServer(
             out.write(header.toByteArray(StandardCharsets.US_ASCII))
 
             val buffer = ByteArray(64 * 1024)
-            var read: Int
-            while (fileStream.read(buffer).also { read = it } != -1) {
+            var read = 0
+            while (!cancelWebTransfersRequested && fileStream.read(buffer).also { read = it } != -1) {
                 out.write(buffer, 0, read)
             }
             fileStream.close()
             out.flush()
         } catch (e: Exception) {
             Log.e(tag, "Download failed", e)
-            sendResponse(out, 500, "Error", "text/plain", "Download error: ${e.message}".toByteArray())
+        } finally {
+            activeTransferSockets.remove(socket)
         }
     }
 
@@ -445,7 +483,7 @@ class WebShareServer(
     <div class="header" id="targetPeerBadge">
       <div>
         <div class="logo">⚡ BeamDrop Continuity</div>
-        <p style="color: var(--text-sec); font-size: 12.5px; margin-top: 3px;">Apple-Style Fluid Ecosystem for Windows 10/11 & Android</p>
+        <p style="color: var(--text-sec); font-size: 12.5px; margin-top: 3px;">Apple iOS 26 Clear Glass Ecosystem for Windows 10/11 & Android • Developer: Sajjad Hossain Mridul</p>
       </div>
       <div class="badge">📱 Paired: $deviceName</div>
     </div>
@@ -454,10 +492,10 @@ class WebShareServer(
     <div class="card" style="border-color: rgba(0, 245, 212, 0.45); background: linear-gradient(135deg, rgba(20,27,45,0.92), rgba(29,39,64,0.88));">
       <div class="card-title" style="color: var(--accent);">
         <span>💻 Standalone Signed Windows Installer (.MSI) & Desktop Client</span>
-        <span style="font-size: 11px; color: var(--amber);">Publisher: Sajjad Hossain • v2.4.0.0</span>
+        <span style="font-size: 11px; color: var(--amber);">Developer: Sajjad Hossain Mridul • v2.5.0</span>
       </div>
       <p style="color: var(--text-sec); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        Official standalone Windows desktop version published by <b>Sajjad Hossain</b>. Features native P2P discovery (TCP 8988 + UDP 8989 + mDNS), 60 FPS glowing fluid aura ripple + Cubic Bezier Aura Path payload migration, and a self-dismissing progress indicator that clears transferred files immediately upon completion.
+        Official standalone Windows desktop version developed by <b>Sajjad Hossain Mridul</b> and the BeamDrop Staff. Features native P2P discovery (TCP 8988 + UDP 8989 + mDNS), iOS 26 Clear Frosted Glass UI, simultaneous directional swipe waves, and a self-dismissing horizontal progress line.
       </p>
       <div style="background: rgba(0,245,212,0.06); border: 1px solid rgba(0,245,212,0.22); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: var(--text-sec); line-height: 1.45;">
         <b style="color: var(--accent);">🛡️ Crash-Proof 1-Click Setup:</b> Extract the ZIP and double-click <code style="color: var(--accent);">Package_BeamDropmsi.bat</code> (or <code style="color: var(--accent);">Package-BeamDropMsi.bat</code>). It automatically unblocks Windows Zone.Identifier tags, installs to <code style="color: var(--accent);">%LOCALAPPDATA%\Programs\Sajjad Hossain\BeamDrop\BeamDrop.exe</code>, creates a Desktop shortcut, and launches the app!
@@ -502,26 +540,26 @@ class WebShareServer(
             <p style="color: var(--text-sec); font-size: 13px;">Select files in BeamDrop on your phone to download them here.</p>
           </div>
         </div>
-
         <div class="card">
           <div class="card-title">
-            <span>🕓 Live Transfer History Ledger</span>
+            <span>🕘 Recent Transfers</span>
           </div>
-          <div id="historyList" style="max-height: 220px; overflow-y: auto;">
-            <p style="color: var(--text-sec); font-size: 12.5px;">Loading transfer logs...</p>
+          <div id="historyList">
+            <p style="color: var(--text-sec); font-size: 12.5px;">No transfers recorded yet.</p>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Discreet, Self-Dismissing Floating Progress Capsule (Clears Immediately on Completion) -->
+  <!-- Discreet, Self-Dismissing Floating Progress Capsule with Bidirectional Cancel -->
   <div class="discreet-capsule" id="discreetCapsule">
     <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; font-weight: 700;">
-      <span id="statusText" style="color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;">Beaming...</span>
+      <span id="statusText" style="color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 210px;">Beaming...</span>
       <span style="display: flex; align-items: center; gap: 8px;">
         <span id="speedBadge" style="color: var(--accent); font-size: 11.5px;">0.0 MB/s</span>
         <span id="pctBadge" style="background: rgba(0,245,212,0.16); color: var(--accent); padding: 2px 8px; border-radius: 99px; font-size: 11px;">0%</span>
+        <button onclick="cancelActiveWebTransfer()" style="background: rgba(244,63,94,0.22); color: #FDA4AF; border: 1px solid rgba(244,63,94,0.65); border-radius: 99px; padding: 3px 10px; font-size: 11px; font-weight: 800; cursor: pointer;">✕ Cancel</button>
       </span>
     </div>
     <div class="progress-bar-wrap">
@@ -538,18 +576,12 @@ class WebShareServer(
     let shockwave = -1;
     let auraPathActive = false;
     let auraPathProgress = 0;
+    let activeXhr = null;
+    let webTransferCancelled = false;
 
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.addEventListener('resize', resize);
     resize();
-
-    function evalCubicBezier(t, p0, p1, p2, p3) {
-      const u = 1 - t;
-      return {
-        x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x,
-        y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y
-      };
-    }
 
     function renderAurora() {
       phase += 0.025;
@@ -568,47 +600,40 @@ class WebShareServer(
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (auraPathActive) {
-        const srcBtn = document.getElementById('sourceTransferBtn');
-        const dstBadge = document.getElementById('targetPeerBadge');
-        if (srcBtn && dstBadge) {
-          const sRect = srcBtn.getBoundingClientRect();
-          const dRect = dstBadge.getBoundingClientRect();
-          const p0 = { x: sRect.left + sRect.width / 2, y: sRect.top + sRect.height / 2 };
-          const p3 = { x: dRect.right - 90, y: dRect.top + dRect.height / 2 };
-          const midX = (p0.x + p3.x) / 2;
-          const midY = Math.min(p0.y, p3.y) - 110;
-          const p1 = { x: (p0.x + midX) / 2, y: midY + Math.sin(phase * 2) * 16 };
-          const p2 = { x: (p3.x + midX) / 2, y: midY - Math.cos(phase * 2) * 16 };
+        const w = canvas.width;
+        const h = canvas.height;
+        const swell = h * (0.14 + 0.14 * auraPathProgress);
+        const tipX = w * 0.5 + Math.sin(phase * 2.0) * 28;
+        const tipY = swell * (1.0 + 0.05 * Math.cos(phase * 2.0));
 
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-          ctx.strokeStyle = 'rgba(0, 245, 212, 0.28)';
-          ctx.lineWidth = 10;
-          ctx.lineCap = 'round';
-          ctx.stroke();
+        const grad = ctx.createLinearGradient(0, 0, 0, tipY * 1.2);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
+        grad.addColorStop(0.45, 'rgba(186, 230, 253, 0.38)');
+        grad.addColorStop(1, 'rgba(0, 245, 212, 0.08)');
 
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          const steps = 40;
-          const maxStep = Math.max(1, Math.floor(steps * auraPathProgress));
-          for (let i = 1; i <= maxStep; i++) {
-            const pt = evalCubicBezier(i / steps, p0, p1, p2, p3);
-            ctx.lineTo(pt.x, pt.y);
-          }
-          ctx.strokeStyle = '#00F5D4';
-          ctx.lineWidth = 4;
-          ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(w * 0.22, swell * 0.16, tipX - w * 0.18, tipY, tipX, tipY);
+        ctx.bezierCurveTo(tipX + w * 0.18, tipY, w * 0.78, swell * 0.16, w, 0);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
 
-          const orb = evalCubicBezier(auraPathProgress, p0, p1, p2, p3);
-          const orbGlow = ctx.createRadialGradient(orb.x, orb.y, 2, orb.x, orb.y, 28);
-          orbGlow.addColorStop(0, 'rgba(255, 255, 255, 1)');
-          orbGlow.addColorStop(0.35, 'rgba(0, 245, 212, 0.9)');
-          orbGlow.addColorStop(0.7, 'rgba(157, 78, 221, 0.5)');
-          orbGlow.addColorStop(1, 'rgba(9, 13, 20, 0)');
-          ctx.fillStyle = orbGlow;
+        for (let d = 0; d < 3; d++) {
+          const p = ((auraPathProgress * 2.2) + d * 0.33) % 1.0;
+          const dropX = w * 0.5 + Math.sin((p + d * 0.25) * Math.PI * 2) * 32;
+          const dropY = tipY * 0.55 + p * (h * 0.26);
+          const dropR = (16 - d * 3) * (1 - p * 0.35);
+          const dg = ctx.createRadialGradient(dropX - dropR * 0.3, dropY - dropR * 0.3, 1, dropX, dropY, dropR);
+          dg.addColorStop(0, 'rgba(255,255,255,0.95)');
+          dg.addColorStop(0.5, 'rgba(186,230,253,0.65)');
+          dg.addColorStop(1, 'rgba(0,245,212,0.1)');
+          ctx.fillStyle = dg;
           ctx.beginPath();
-          ctx.arc(orb.x, orb.y, 28, 0, Math.PI * 2);
+          ctx.arc(dropX, dropY, dropR, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -643,7 +668,23 @@ class WebShareServer(
     dropZone.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
     fileInput.addEventListener('change', () => { if (fileInput.files.length) uploadFiles(fileInput.files); });
 
+    function cancelActiveWebTransfer() {
+      webTransferCancelled = true;
+      if (activeXhr) {
+        try { activeXhr.abort(); } catch (e) {}
+        activeXhr = null;
+      }
+      fetch('/api/cancel', { method: 'POST' }).catch(() => {});
+      targetIntensity = 0.35;
+      auraPathActive = false;
+      auraPathProgress = 0;
+      fileInput.value = '';
+      discreetCapsule.style.display = 'none';
+      progressBar.style.width = '0%';
+    }
+
     function uploadFiles(files) {
+      webTransferCancelled = false;
       discreetCapsule.style.display = 'block';
       progressBar.style.width = '0%';
       targetIntensity = 0.95;
@@ -653,7 +694,8 @@ class WebShareServer(
       let idx = 0;
 
       function sendNext() {
-        if (idx >= files.length) {
+        if (webTransferCancelled || idx >= files.length) {
+          activeXhr = null;
           targetIntensity = 0.35;
           auraPathActive = false;
           auraPathProgress = 0;
@@ -667,9 +709,10 @@ class WebShareServer(
         const file = files[idx++];
         const startTime = performance.now();
         const xhr = new XMLHttpRequest();
+        activeXhr = xhr;
         xhr.open('POST', '/upload?filename=' + encodeURIComponent(file.name), true);
         xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
+          if (e.lengthComputable && !webTransferCancelled) {
             const pct = (e.loaded / e.total) * 100;
             auraPathProgress = Math.max(0.02, Math.min(1.0, e.loaded / e.total));
             progressBar.style.width = pct.toFixed(1) + '%';
@@ -682,6 +725,7 @@ class WebShareServer(
         };
         xhr.onload = () => { sendNext(); };
         xhr.onerror = () => { sendNext(); };
+        xhr.onabort = () => { cancelActiveWebTransfer(); };
         xhr.send(file);
       }
       sendNext();
@@ -711,6 +755,7 @@ class WebShareServer(
         const resp = await fetch('/api/history');
         const items = await resp.json();
         const list = document.getElementById('historyList');
+        if (!list) return;
         if (!items || !items.length) {
           list.innerHTML = '<p style="color: var(--text-sec); font-size: 12.5px;">No transfers recorded yet.</p>';
           return;
@@ -718,9 +763,14 @@ class WebShareServer(
         list.innerHTML = items.map(rec => {
           const d = new Date(rec.timestamp).toLocaleTimeString();
           const col = rec.status === 'COMPLETED' ? '#10B981' : (rec.status === 'CANCELLED' ? '#FFB703' : '#F43F5E');
+          const sizeMb = rec.fileSize ? (rec.fileSize / (1024*1024)).toFixed(1) + ' MB' : '';
           return '<div class="file-item">' +
-            '<div><div style="font-weight: 700; font-size: 12.5px;">' + (rec.direction === 'SENT' ? '↑ ' : '↓ ') + rec.fileName + '</div>' +
-            '<div style="font-size: 11px; color: var(--text-sec);">' + rec.peer + ' • ' + d + '</div></div>' +
+            '<div><div style="font-weight: 800; font-size: 13px; color: var(--text);">' + rec.fileName + '</div>' +
+            '<div style="display:flex; align-items:center; gap:6px; margin-top:4px; font-size: 11px; color: var(--text-sec);">' +
+              '<span style="background:rgba(0,245,212,0.14); border:1px solid rgba(0,245,212,0.4); color:#00F5D4; border-radius:6px; padding:1px 7px; font-weight:700;">' + (rec.direction === 'SENT' ? '↑ ' : '↓ ') + rec.peer + '</span>' +
+              (sizeMb ? '<span>• ' + sizeMb + '</span>' : '') +
+              '<span>• ' + d + '</span>' +
+            '</div></div>' +
             '<span class="status-pill" style="background:' + col + '22; color:' + col + '; border:1px solid ' + col + ';">' + rec.status + '</span>' +
           '</div>';
         }).join('');

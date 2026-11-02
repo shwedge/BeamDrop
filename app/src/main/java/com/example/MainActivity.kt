@@ -85,24 +85,23 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.onAppForegrounded()
+    }
+
     override fun onResume() {
         super.onResume()
-        if (nfcAdapter?.isEnabled == true) {
-            // Enable Foreground Dispatch for intent-based NDEF/Tag discovery
-            if (pendingIntent != null) {
-                try {
-                    nfcAdapter?.enableForegroundDispatch(
-                        this,
-                        pendingIntent,
-                        intentFiltersArray,
-                        techListsArray
-                    )
-                } catch (_: Exception) {
-                }
-            }
-            // Enable low-latency NFC ReaderMode discovery for direct peer-to-peer HCE & Tag taps
-            viewModel.nfcHelper.enableReaderModeDiscovery(this) {
-                viewModel.getCurrentNfcPayload()
+        if (nfcAdapter?.isEnabled == true && pendingIntent != null) {
+            // Passive Foreground Dispatch listens for physical NFC taps with zero idle RF coil heat
+            try {
+                nfcAdapter?.enableForegroundDispatch(
+                    this,
+                    pendingIntent,
+                    intentFiltersArray,
+                    techListsArray
+                )
+            } catch (_: Exception) {
             }
         }
     }
@@ -110,12 +109,16 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         if (nfcAdapter?.isEnabled == true) {
-            viewModel.nfcHelper.disableReaderModeDiscovery(this)
             try {
                 nfcAdapter?.disableForegroundDispatch(this)
             } catch (_: Exception) {
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.onAppBackgrounded()
     }
 
     override fun onNewIntent(intent: Intent) {

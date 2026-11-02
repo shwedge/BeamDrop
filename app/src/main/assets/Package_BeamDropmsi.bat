@@ -1,17 +1,17 @@
 @echo off
 setlocal EnableDelayedExpansion
-title BeamDrop Continuity - 1-Click MSI Installer and Launcher - Publisher Sajjad H0ssain
+title BeamDrop Continuity - 1-Click MSI Installer and Launcher - Publisher Sajjad Hossain
 color 0B
 
 echo ============================================================================
-echo   BeamDrop Continuity Engine v2.4.0.0 - Native Windows MSI and App Setup
-echo   Publisher: Sajjad H0ssain [sajjadtheacid@gmail.com]
+echo   BeamDrop Continuity Engine v2.5.0.0 - Native Windows MSI and App Setup
+echo   Publisher: Sajjad Hossain Mridul [sajjadtheacid@gmail.com]
 echo ============================================================================
 echo.
 
 cd /d "%~dp0"
 
-set "INSTALL_DIR=%LOCALAPPDATA%\Programs\Sajjad H0ssain\BeamDrop"
+set "INSTALL_DIR=%LOCALAPPDATA%\Programs\Sajjad Hossain Mridul\BeamDrop"
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 
 echo [1/4] Removing Windows Mark-of-the-Web Zone.Identifier blocks...
@@ -22,7 +22,7 @@ if exist "%~dp0Build-BeamDropMsi.ps1" goto :RUN_PS_BUILDER
 goto :DIRECT_COMPILE
 
 :RUN_PS_BUILDER
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Build-BeamDropMsi.ps1" -SourceDir "%~dp0."
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Build-BeamDropMsi.ps1" -OutputDir "%~dp0."
 if exist "%INSTALL_DIR%\BeamDrop.exe" goto :CHECK_LAUNCH
 if exist "%~dp0BeamDrop.exe" goto :COPY_TO_INSTALL
 
@@ -45,15 +45,19 @@ set "WPF_DIR=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\WPF"
 :DO_CSC_BUILD
 set "MANIFEST_ARG="
 if exist "%~dp0BeamDrop.exe.manifest" set "MANIFEST_ARG=/win32manifest:"%~dp0BeamDrop.exe.manifest""
+if exist "%~dp0BeamDrop.manifest" set "MANIFEST_ARG=/win32manifest:"%~dp0BeamDrop.manifest""
 
-"%CSC_PATH%" /nologo /target:winexe /out:"%~dp0BeamDrop.exe" /Platform:anycpu /optimize+ %MANIFEST_ARG% /r:"%WPF_DIR%\PresentationCore.dll" /r:"%WPF_DIR%\PresentationFramework.dll" /r:"%WPF_DIR%\WindowsBase.dll" /r:System.Xaml.dll /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Net.Http.dll "%~dp0BeamDropWindows.cs"
+set "ICON_ARG="
+if exist "%~dp0BeamDrop.ico" set "ICON_ARG=/win32icon:"%~dp0BeamDrop.ico""
+
+"%CSC_PATH%" /nologo /target:winexe /out:"%~dp0BeamDrop.exe" /Platform:anycpu /optimize+ %MANIFEST_ARG% %ICON_ARG% /r:"%WPF_DIR%\PresentationCore.dll" /r:"%WPF_DIR%\PresentationFramework.dll" /r:"%WPF_DIR%\WindowsBase.dll" /r:System.Xaml.dll /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Net.Http.dll "%~dp0BeamDropWindows.cs"
 if errorlevel 1 goto :COMPILE_ERROR
 
 copy /Y "%~dp0BeamDrop.exe" "%~dp0BeamDropApp.exe" >nul 2>&1
 
 :COPY_TO_INSTALL
 if exist "%~dp0BeamDrop.exe" copy /Y "%~dp0BeamDrop.exe" "%INSTALL_DIR%\BeamDrop.exe" >nul 2>&1
-if exist "%~dp0BeamDrop.exe.manifest" copy /Y "%~dp0BeamDrop.exe.manifest" "%INSTALL_DIR%\BeamDrop.exe.manifest" >nul 2>&1
+if exist "%~dp0BeamDrop.ico" copy /Y "%~dp0BeamDrop.ico" "%INSTALL_DIR%\BeamDrop.ico" >nul 2>&1
 
 :CHECK_LAUNCH
 echo.
@@ -65,7 +69,7 @@ goto :COMPILE_ERROR
 
 :LAUNCH_INSTALLED
 echo   [OK] Installed at: %INSTALL_DIR%\BeamDrop.exe
-echo   [OK] Publisher: Sajjad H0ssain [sajjadtheacid@gmail.com]
+echo   [OK] Publisher: Sajjad Hossain Mridul [sajjadtheacid@gmail.com]
 start "" "%INSTALL_DIR%\BeamDrop.exe"
 echo.
 echo BeamDrop Continuity is now running!

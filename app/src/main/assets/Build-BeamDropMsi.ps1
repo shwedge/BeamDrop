@@ -1,7 +1,7 @@
 # ============================================================================
 #   BeamDrop Continuity - Native Windows Installer (.MSI and .EXE) Builder
-#   Publisher: Sajjad Hossain (sajjadtheacid@gmail.com)
-#   Product:   BeamDrop Continuity (v2.4.0.0)
+#   Publisher: Sajjad Hossain Mridul (sajjadtheacid@gmail.com)
+#   Product:   BeamDrop Continuity (v2.5.0.0)
 # ============================================================================
 
 param(
@@ -13,8 +13,8 @@ $ErrorActionPreference = "Continue"
 
 Write-Host "============================================================================" -ForegroundColor Cyan
 Write-Host "  BeamDrop Continuity - Standalone Windows Installer and App Setup" -ForegroundColor Cyan
-Write-Host "  Official Publisher: Sajjad Hossain" -ForegroundColor Green
-Write-Host "  Product Version:    2.4.0.0" -ForegroundColor White
+Write-Host "  Official Publisher: Sajjad Hossain Mridul" -ForegroundColor Green
+Write-Host "  Product Version:    2.5.0.0" -ForegroundColor White
 Write-Host "============================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -34,8 +34,8 @@ $manifestPath = Join-Path $scriptDir "BeamDrop.manifest"
 $manifestXml = @"
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="2.4.0.0" processorArchitecture="*" name="SajjadHossain.BeamDrop.Continuity" type="win32"/>
-  <description>BeamDrop Continuity Desktop Application - Published by Sajjad Hossain</description>
+  <assemblyIdentity version="2.5.0.0" processorArchitecture="*" name="SajjadHossainMridul.BeamDrop.Continuity" type="win32"/>
+  <description>BeamDrop Continuity Desktop Application - Published by Sajjad Hossain Mridul</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
@@ -80,6 +80,8 @@ try {
     Get-Process -Name "BeamDropApp", "BeamDrop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 300
 } catch {}
+Remove-Item -LiteralPath $targetExe -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $portableExe -Force -ErrorAction SilentlyContinue
 
 $iconArg = if (Test-Path -LiteralPath $icoPath) { "/win32icon:$icoPath" } else { "" }
 
@@ -132,7 +134,7 @@ if (Test-Path -LiteralPath $pfxFile) {
         )
         Set-AuthenticodeSignature -LiteralPath $targetExe -Certificate $signingCert -HashAlgorithm SHA256 -ErrorAction SilentlyContinue | Out-Null
         Set-AuthenticodeSignature -LiteralPath $portableExe -Certificate $signingCert -HashAlgorithm SHA256 -ErrorAction SilentlyContinue | Out-Null
-        Write-Host "      Signed with SHA256 Authenticode (Publisher: Sajjad Hossain)" -ForegroundColor Green
+        Write-Host "      Signed with SHA256 Authenticode (Publisher: Sajjad Hossain Mridul)" -ForegroundColor Green
     } catch {
         Write-Host "      [Note] Authenticode signing completed with fallback." -ForegroundColor DarkGray
     }
@@ -140,7 +142,7 @@ if (Test-Path -LiteralPath $pfxFile) {
 
 # 4. Install Application into Per-User Windows Programs and Register in Windows OS
 Write-Host "[3/5] Installing BeamDrop Continuity to Windows Programs and Desktop..." -ForegroundColor Yellow
-$installDir = Join-Path $env:LOCALAPPDATA "Programs\Sajjad Hossain\BeamDrop"
+$installDir = Join-Path $env:LOCALAPPDATA "Programs\Sajjad Hossain Mridul\BeamDrop"
 New-Item -ItemType Directory -Path $installDir -Force -ErrorAction SilentlyContinue | Out-Null
 $installedExe = Join-Path $installDir "BeamDrop.exe"
 
@@ -160,7 +162,7 @@ try {
     $desktopShortcut = $wsh.CreateShortcut((Join-Path $desktopPath "BeamDrop Continuity.lnk"))
     $desktopShortcut.TargetPath = $installedExe
     $desktopShortcut.WorkingDirectory = $installDir
-    $desktopShortcut.Description = "BeamDrop Continuity - Published by Sajjad Hossain"
+    $desktopShortcut.Description = "BeamDrop Continuity - Published by Sajjad Hossain Mridul"
     if (Test-Path -LiteralPath (Join-Path $installDir "BeamDrop.ico")) {
         $desktopShortcut.IconLocation = (Join-Path $installDir "BeamDrop.ico")
     }
@@ -170,7 +172,7 @@ try {
     $startShortcut = $wsh.CreateShortcut((Join-Path $startMenuPath "BeamDrop Continuity.lnk"))
     $startShortcut.TargetPath = $installedExe
     $startShortcut.WorkingDirectory = $installDir
-    $startShortcut.Description = "BeamDrop Continuity - Published by Sajjad Hossain"
+    $startShortcut.Description = "BeamDrop Continuity - Published by Sajjad Hossain Mridul"
     if (Test-Path -LiteralPath (Join-Path $installDir "BeamDrop.ico")) {
         $startShortcut.IconLocation = (Join-Path $installDir "BeamDrop.ico")
     }
@@ -183,7 +185,7 @@ try {
     $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\BeamDropContinuity"
     New-Item -Path $regPath -Force -ErrorAction SilentlyContinue | Out-Null
     Set-ItemProperty -Path $regPath -Name "DisplayName" -Value "BeamDrop Continuity" -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path $regPath -Name "DisplayVersion" -Value "2.4.0.0" -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $regPath -Name "DisplayVersion" -Value "2.5.0.0" -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "Publisher" -Value "Sajjad Hossain" -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "Contact" -Value "sajjadtheacid@gmail.com" -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "InstallLocation" -Value $installDir -ErrorAction SilentlyContinue
@@ -191,7 +193,7 @@ try {
     Set-ItemProperty -Path $regPath -Name "UninstallString" -Value "cmd.exe /c rmdir /s /q `"$installDir`"" -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "NoModify" -Value 1 -Type DWord -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "NoRepair" -Value 1 -Type DWord -ErrorAction SilentlyContinue
-    Write-Host "      Registered in Windows Installed Apps (Publisher: Sajjad Hossain)." -ForegroundColor Green
+    Write-Host "      Registered in Windows Installed Apps (Publisher: Sajjad Hossain Mridul)." -ForegroundColor Green
 } catch {}
 
 # 5. Package Standalone Signed BeamDropInstaller.msi
@@ -220,10 +222,10 @@ try {
     $upgGuid  = "{5E7A8B9C-0D1E-2F3A-4B5C-6D7E8F9A0B1C}"
     $props = @(
         @("ProductName", "BeamDrop Continuity"),
-        @("ProductVersion", "2.4.0.0"),
+        @("ProductVersion", "2.5.0.0"),
         @("ProductCode", $prodGuid),
         @("UpgradeCode", $upgGuid),
-        @("Manufacturer", "Sajjad Hossain"),
+        @("Manufacturer", "Sajjad Hossain Mridul"),
         @("ARPCONTACT", "sajjadtheacid@gmail.com")
     )
     foreach ($p in $props) {
@@ -256,7 +258,7 @@ try {
 
 Write-Host "[5/5] Installation complete!" -ForegroundColor Cyan
 Write-Host "============================================================================" -ForegroundColor Cyan
-Write-Host "  BeamDrop Continuity (v2.4.0.0) by Sajjad Hossain is installed and ready!" -ForegroundColor Green
+Write-Host "  BeamDrop Continuity (v2.5.0.0) by Sajjad Hossain Mridul is installed and ready!" -ForegroundColor Green
 Write-Host "  Installed Location: $installedExe" -ForegroundColor White
 Write-Host "  Portable Binary:    $portableExe" -ForegroundColor White
 Write-Host "============================================================================" -ForegroundColor Cyan

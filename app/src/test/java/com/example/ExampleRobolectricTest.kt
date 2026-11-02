@@ -142,5 +142,111 @@ class ExampleRobolectricTest {
         assertEquals(8988, discovered?.port)
         assertEquals(com.example.model.DeviceType.COMPUTER, discovered?.deviceType)
     }
-}
 
+    @Test
+    fun `mainActivity launches and networkDiscoveryManager initializes without crash`() {
+        val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        assertFalse(activity.isFinishing)
+
+        val discoveryManager = com.example.discovery.NetworkDiscoveryManager(
+            context = activity,
+            deviceName = "HONOR Test",
+            tcpPort = 8988
+        )
+        discoveryManager.start()
+        val localIp = discoveryManager.getPrimaryLocalIpAddress() ?: discoveryManager.localIpAddress.value
+        assertTrue(localIp.isNotBlank())
+
+        // Verify peer appears immediately when joining Wi-Fi / BeamDrop
+        discoveryManager.registerHandshakePeer(
+            peerId = "win_victus",
+            peerName = "SAJJAD-VICTUS",
+            peerIp = "192.168.1.109",
+            port = 8988,
+            deviceType = com.example.model.DeviceType.COMPUTER
+        )
+        assertTrue(discoveryManager.discoveredPeers.value.containsKey("192.168.1.109"))
+
+        // Verify peer disappears immediately when leaving BeamDrop
+        val removed = discoveryManager.removePeerByIdOrIp(peerId = "win_victus", peerIp = "192.168.1.109")
+        assertTrue(removed)
+        assertFalse(discoveryManager.discoveredPeers.value.containsKey("192.168.1.109"))
+
+        discoveryManager.pauseBackgroundActivity()
+        discoveryManager.resumeBackgroundActivity()
+        discoveryManager.stop()
+
+        controller.pause().stop().destroy()
+    }
+
+    @Test
+    fun `auraPathState serializes directional flow and both sender and receiver can cancel active transfer`() {
+        val leftAura = com.example.model.AuraPathState(
+            isActive = true,
+            sessionId = "aura_dir_1",
+            sourceDeviceName = "HONOR Phone",
+            targetDeviceName = "SAJJAD-VICTUS",
+            fileName = "Design_Assets.zip",
+            migrationProgress = 0.42f,
+            speedMbps = 78.4f,
+            flowDirection = "LEFT"
+        )
+        val wireLeft = leftAura.toWirePacket("MIGRATING")
+        val parsedLeft = com.example.model.AuraPathState.fromWirePacket(wireLeft, "SAJJAD-VICTUS")
+        assertEquals("LEFT", parsedLeft?.flowDirection)
+        assertEquals("MIGRATING", parsedLeft?.stateToken)
+        assertEquals(true, parsedLeft?.isActive)
+
+        val cancelledWire = leftAura.copy(flowDirection = "RIGHT").toWirePacket("CANCELLED")
+        val parsedCancelled = com.example.model.AuraPathState.fromWirePacket(cancelledWire, "SAJJAD-VICTUS")
+        assertEquals("RIGHT", parsedCancelled?.flowDirection)
+        assertEquals("CANCELLED", parsedCancelled?.stateToken)
+        assertEquals(false, parsedCancelled?.isActive)
+
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val viewModel = com.example.ui.BeamDropViewModel(app)
+        viewModel.addCustomFile("Design_Assets.zip", 15 * 1024 * 1024L, "application/zip", "/tmp/Design_Assets.zip")
+        val peer = com.example.model.BeamPeer(
+            id = "peer_win",
+            name = "SAJJAD-VICTUS",
+            ipAddress = "192.168.1.109",
+            deviceType = com.example.model.DeviceType.COMPUTER
+        )
+        val item = viewModel.mediaItems.value.first { it.title == "Design_Assets.zip" }
+
+        // Simulate active transfer (receiver or sender) and cancel mid-flight
+        viewModel.updateActiveTransferProgress(peer, item, progress = 0.35f, speedMbps = 52.0f)
+        assertTrue(viewModel.transferState.value is com.example.model.TransferState.Transferring)
+
+        viewModel.cancelAllActiveTransfers()
+        assertTrue(viewModel.transferState.value is com.example.model.TransferState.Idle)
+        assertTrue(viewModel.transferQueue.value.isEmpty())
+        assertFalse(viewModel.auraPathState.value.isActive)
+
+        viewModel.onCleared()
+    }
+
+    @Test
+    fun `plain text staging avoids txt file creation and theme state updates for iOS 26 Clear`() {
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val viewModel = com.example.ui.BeamDropViewModel(app)
+
+        viewModel.addTextSnippet("Hello from Sajjad Hossain Mridul")
+        val stagedText = viewModel.mediaItems.value.firstOrNull()
+        assertEquals("text/plain;beamdrop-raw", stagedText?.mimeType)
+        assertEquals("beamtext://Hello from Sajjad Hossain Mridul", stagedText?.uri)
+        assertEquals(true, stagedText?.isSelected)
+
+        // Verify iOS 26 Clear theme mode updates ActiveBeamThemeState
+        viewModel.setThemeMode("iOS 26 Clear")
+        assertTrue(com.example.ui.theme.ActiveBeamThemeState.current.isClearGlass)
+
+        // Verify swipeToSendStagedItems triggers directional wave even without manually selecting a receiver
+        viewModel.swipeToSendStagedItems("RIGHT")
+        assertTrue(viewModel.auraPathState.value.isActive)
+        assertEquals("RIGHT", viewModel.auraPathState.value.flowDirection)
+
+        viewModel.onCleared()
+    }
+}

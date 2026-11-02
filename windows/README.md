@@ -1,7 +1,7 @@
 # BeamDrop Continuity for Windows 10 & 11
 ### Standalone Signed Windows Installer (`.MSI`) & Native Desktop Application
 **Official Publisher:** Sajjad H0ssain (`sajjadtheacid@gmail.com`)  
-**Product Version:** 2.4.0.0  
+**Product Version:** 2.5.0.0  
 **Target OS:** Windows 10 & Windows 11 (64-bit AMD64)
 
 ---

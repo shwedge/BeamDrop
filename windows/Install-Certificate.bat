@@ -1,9 +1,9 @@
 @echo off
 setlocal EnableDelayedExpansion
-title BeamDrop Continuity - Register Trusted Publisher: Sajjad Hossain
+title BeamDrop Continuity - Register Trusted Publisher: Sajjad Hossain Mridul
 echo ============================================================================
 echo   BeamDrop Continuity - Authenticode Digital Certificate Installer
-echo   Publisher: Sajjad Hossain [sajjadtheacid@gmail.com]
+echo   Publisher: Sajjad Hossain Mridul [sajjadtheacid@gmail.com]
 echo ============================================================================
 echo.
 echo Installing Sajjad Hossain Authenticode Code Signing Certificate...

@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.net.Uri
 import android.nfc.Tag
 import android.os.Build
 import android.util.Log
@@ -40,9 +41,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.example.ui.theme.ActiveBeamThemeState
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+
+data class ReceivedTextPayload(
+    val senderName: String,
+    val textContent: String,
+    val timestampMs: Long = System.currentTimeMillis()
+)
 
 class BeamDropViewModel(application: Application) : AndroidViewModel(application) {
     private val tag = "BeamDropViewModel"
@@ -55,7 +63,57 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
     private val mediaLoader = DeviceMediaLoader(application)
     val wifiDirectManager = WifiDirectManager(application)
 
-    val deviceName: String = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+    private val prefs = application.getSharedPreferences("beamdrop_user_settings", android.content.Context.MODE_PRIVATE)
+
+    val defaultDeviceName: String = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+
+    private val _customDeviceName = MutableStateFlow(
+        prefs.getString("custom_device_name", defaultDeviceName)?.takeIf { it.isNotBlank() } ?: defaultDeviceName
+    )
+    val customDeviceName: StateFlow<String> = _customDeviceName.asStateFlow()
+
+    val deviceName: String
+        get() = _customDeviceName.value
+
+    // Settings State Flows (persisted in SharedPreferences)
+    private val _themeMode = MutableStateFlow(prefs.getString("theme_mode", "System") ?: "System")
+    val themeMode: StateFlow<String> = _themeMode.asStateFlow()
+
+    private val _colorTheme = MutableStateFlow(prefs.getString("color_theme", "LocalSend") ?: "LocalSend")
+    val colorTheme: StateFlow<String> = _colorTheme.asStateFlow()
+
+    private val _languageSetting = MutableStateFlow(prefs.getString("language_setting", "System") ?: "System")
+    val languageSetting: StateFlow<String> = _languageSetting.asStateFlow()
+
+    private val _minimizeToTray = MutableStateFlow(prefs.getBoolean("minimize_to_tray", false))
+    val minimizeToTray: StateFlow<Boolean> = _minimizeToTray.asStateFlow()
+
+    private val _autostartAfterLogin = MutableStateFlow(prefs.getBoolean("autostart_after_login", false))
+    val autostartAfterLogin: StateFlow<Boolean> = _autostartAfterLogin.asStateFlow()
+
+    private val _animationsEnabled = MutableStateFlow(prefs.getBoolean("animations_enabled", true))
+    val animationsEnabled: StateFlow<Boolean> = _animationsEnabled.asStateFlow()
+
+    private val _quickSaveEnabled = MutableStateFlow(prefs.getBoolean("quick_save", false))
+    val quickSaveEnabled: StateFlow<Boolean> = _quickSaveEnabled.asStateFlow()
+
+    private val _quickSaveFavorites = MutableStateFlow(prefs.getBoolean("quick_save_favorites", true))
+    val quickSaveFavorites: StateFlow<Boolean> = _quickSaveFavorites.asStateFlow()
+
+    private val _requirePinEnabled = MutableStateFlow(prefs.getBoolean("require_pin", false))
+    val requirePinEnabled: StateFlow<Boolean> = _requirePinEnabled.asStateFlow()
+
+    private val _autoFinishEnabled = MutableStateFlow(prefs.getBoolean("auto_finish", true))
+    val autoFinishEnabled: StateFlow<Boolean> = _autoFinishEnabled.asStateFlow()
+
+    private val _saveToHistoryEnabled = MutableStateFlow(prefs.getBoolean("save_to_history", true))
+    val saveToHistoryEnabled: StateFlow<Boolean> = _saveToHistoryEnabled.asStateFlow()
+
+    private val _advancedSettingsEnabled = MutableStateFlow(prefs.getBoolean("advanced_settings", false))
+    val advancedSettingsEnabled: StateFlow<Boolean> = _advancedSettingsEnabled.asStateFlow()
+
+    private val _isServerRunning = MutableStateFlow(true)
+    val isServerRunning: StateFlow<Boolean> = _isServerRunning.asStateFlow()
 
     // Persistent Transfer Queue State
     private val _transferQueue = MutableStateFlow<List<QueuedTransfer>>(emptyList())
@@ -92,19 +150,21 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                 _lastReceivedFile.value = file
                 haptics.onTransferCompleted()
 
-                transferRepository.logTransfer(
-                    TransferRecord(
-                        fileName = file.name,
-                        fileType = "DOCUMENTS",
-                        fileSize = size,
-                        direction = "RECEIVED",
-                        peerDeviceName = senderInfo,
-                        durationMs = 1200L,
-                        transferRateMbps = 55.4f,
-                        localUri = file.absolutePath,
-                        status = "COMPLETED"
+                if (_saveToHistoryEnabled.value) {
+                    transferRepository.logTransfer(
+                        TransferRecord(
+                            fileName = file.name,
+                            fileType = "DOCUMENTS",
+                            fileSize = size,
+                            direction = "RECEIVED",
+                            peerDeviceName = senderInfo,
+                            durationMs = 1200L,
+                            transferRateMbps = 55.4f,
+                            localUri = file.absolutePath,
+                            status = "COMPLETED"
+                        )
                     )
-                )
+                }
 
                 // Immediately clear queue and self-dismiss progress state upon completion
                 dismissCompleted()
@@ -143,11 +203,20 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
     private val _isContactLocked = MutableStateFlow(false)
     val isContactLocked: StateFlow<Boolean> = _isContactLocked.asStateFlow()
 
+    private val _isNfcScanning = MutableStateFlow(false)
+    val isNfcScanning: StateFlow<Boolean> = _isNfcScanning.asStateFlow()
+
     private val _showInfoDialog = MutableStateFlow(false)
     val showInfoDialog: StateFlow<Boolean> = _showInfoDialog.asStateFlow()
 
     private val _lastReceivedFile = MutableStateFlow<File?>(null)
     val lastReceivedFile: StateFlow<File?> = _lastReceivedFile.asStateFlow()
+
+    private val _receivedTextPopup = MutableStateFlow<ReceivedTextPayload?>(null)
+    val receivedTextPopup: StateFlow<ReceivedTextPayload?> = _receivedTextPopup.asStateFlow()
+
+    private val _saveFolderDisplayName = MutableStateFlow(RealTransferEngine.getSaveFolderDisplayName(application))
+    val saveFolderDisplayName: StateFlow<String> = _saveFolderDisplayName.asStateFlow()
 
     // Shared cross-platform Canvas 'Aura Path' animation state synchronized with Windows
     private val _auraPathState = MutableStateFlow(AuraPathState())
@@ -155,15 +224,21 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
 
     private var measuredSourceButtonOffset: Offset? = null
     private val measuredTargetPeerOffsets = ConcurrentHashMap<String, Offset>()
+    private var pendingTargetPeer: BeamPeer? = null
+    private var pendingFlowDirection: String = "TOP"
+    private var activePeerIp: String? = null
 
     val isNfcReady: Boolean
         get() = nfcHelper.isNfcSupported
 
-    val isProximityActive: Boolean = true
+    val isProximityActive: Boolean = false
 
     private var transferJob: Job? = null
+    private var nfcScanJob: Job? = null
+    private var directionalWavePreviewJob: Job? = null
 
     init {
+        ActiveBeamThemeState.update(_themeMode.value, _colorTheme.value)
         // Start Real Wi-Fi discovery & Wi-Fi Direct P2P
         discoveryManager.start()
         wifiDirectManager.start()
@@ -183,14 +258,21 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             discoveryManager.remoteAuraPathState.collect { remoteState ->
                 if (remoteState != null) {
+                    if (remoteState.stateToken == "CANCELLED") {
+                        transferEngine.cancelActiveTransfers()
+                        transferJob?.cancel()
+                        transferJob = null
+                        activeTransferJobs.values.forEach { it.cancel() }
+                        activeTransferJobs.clear()
+                        dismissCompleted()
+                        return@collect
+                    }
                     val targetOffset = measuredTargetPeerOffsets.values.firstOrNull()
                     _auraPathState.value = remoteState.copy(
                         sourceButtonOffset = measuredSourceButtonOffset,
                         targetDeviceOffset = targetOffset
                     )
-                    if (remoteState.isActive) {
-                        _auraIntensity.value = 0.8f
-                    } else if (_transferState.value is TransferState.Idle) {
+                    if (!remoteState.isActive && _transferState.value is TransferState.Idle) {
                         _auraIntensity.value = 0f
                     }
                 }
@@ -198,7 +280,19 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun onAppForegrounded() {
+        discoveryManager.resumeBackgroundActivity()
+    }
+
+    fun onAppBackgrounded() {
+        discoveryManager.pauseBackgroundActivity()
+    }
+
     fun updateSourceButtonCoordinates(offset: Offset) {
+        val prev = measuredSourceButtonOffset
+        if (prev != null && kotlin.math.abs(prev.x - offset.x) < 8f && kotlin.math.abs(prev.y - offset.y) < 8f) {
+            return
+        }
         measuredSourceButtonOffset = offset
         if (_auraPathState.value.isActive) {
             _auraPathState.value = _auraPathState.value.copy(sourceButtonOffset = offset)
@@ -206,6 +300,10 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun updateTargetDeviceCoordinates(peerId: String, offset: Offset) {
+        val prev = measuredTargetPeerOffsets[peerId]
+        if (prev != null && kotlin.math.abs(prev.x - offset.x) < 8f && kotlin.math.abs(prev.y - offset.y) < 8f) {
+            return
+        }
         measuredTargetPeerOffsets[peerId] = offset
         if (_auraPathState.value.isActive && (_auraPathState.value.targetPeerId == peerId || _auraPathState.value.targetDeviceOffset == null)) {
             _auraPathState.value = _auraPathState.value.copy(targetDeviceOffset = offset)
@@ -228,9 +326,18 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                         deviceType = event.deviceType
                     )
                 }
+                is IncomingTransferEvent.PeerLeft -> {
+                    discoveryManager.removePeerByIdOrIp(
+                        peerId = event.peerId,
+                        peerIp = event.peerIp,
+                        peerName = event.peerName
+                    )
+                }
                 is IncomingTransferEvent.Started -> {
-                    _isContactLocked.value = true
-                    _auraIntensity.value = 0.8f
+                    discoveryManager.setTransferActive(true)
+                    activePeerIp = event.senderIp
+                    _isContactLocked.value = false
+                    _auraIntensity.value = 0f
                     haptics.onTopContactLocked()
 
                     val rxId = "rx_${UUID.randomUUID()}"
@@ -246,7 +353,7 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                         peerName = event.senderName,
                         status = QueueStatus.IN_PROGRESS
                     )
-                    _transferQueue.value = listOf(initialTransfer) + _transferQueue.value
+                    _transferQueue.value = listOf(initialTransfer)
 
                     val devType = if (event.senderName.contains("Windows", ignoreCase = true) ||
                         event.senderName.contains("PC", ignoreCase = true) ||
@@ -274,30 +381,15 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                         sourceDeviceName = event.senderName,
                         targetDeviceName = deviceName,
                         targetPeerId = peer.id,
+                        flowDirection = event.flowDirection,
+                        stateToken = "START",
                         sourceButtonOffset = null,
                         targetDeviceOffset = measuredSourceButtonOffset,
                         timestampMs = System.currentTimeMillis()
                     )
                 }
                 is IncomingTransferEvent.Progress -> {
-                    _auraIntensity.value = 0.7f
-                    var activePeerName = "Connected Device"
-                    currentIncomingTransferId?.let { id ->
-                        _transferQueue.value = _transferQueue.value.map { item ->
-                            if (item.id == id) {
-                                activePeerName = item.peerName
-                                item.copy(
-                                    fileName = event.fileName,
-                                    fileSize = event.totalBytes,
-                                    bytesTransferred = event.bytesTransferred,
-                                    progress = event.progress,
-                                    speedMbps = event.speedMbps,
-                                    status = QueueStatus.IN_PROGRESS
-                                )
-                            } else item
-                        }
-                    }
-
+                    val activePeerName = _auraPathState.value.sourceDeviceName.ifEmpty { "Connected Device" }
                     val dummyItem = SharableItem(
                         id = "rx_${event.fileIndex}",
                         title = event.fileName,
@@ -317,6 +409,7 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                     val peer = BeamPeer(
                         id = "incoming_sender",
                         name = activePeerName,
+                        ipAddress = activePeerIp.orEmpty(),
                         deviceType = devType
                     )
                     _transferState.value = TransferState.Transferring(
@@ -339,73 +432,85 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                         isOutgoing = false,
                         sourceDeviceName = activePeerName,
                         targetDeviceName = deviceName,
+                        stateToken = "MIGRATING",
                         targetDeviceOffset = measuredSourceButtonOffset,
                         timestampMs = System.currentTimeMillis()
                     )
-                    haptics.onTransferChunkTick()
                 }
-                is IncomingTransferEvent.Completed -> {
+                is IncomingTransferEvent.TextReceived -> {
+                    discoveryManager.setTransferActive(false)
                     haptics.onTransferCompleted()
-                    _lastReceivedFile.value = event.savedFiles.firstOrNull()
                     currentIncomingTransferId = null
-
-                    // Save to Room DB
-                    viewModelScope.launch {
-                        event.savedFiles.forEach { file ->
+                    _receivedTextPopup.value = ReceivedTextPayload(
+                        senderName = event.senderName,
+                        textContent = event.textContent
+                    )
+                    if (_saveToHistoryEnabled.value) {
+                        viewModelScope.launch {
+                            val snippetPreview = event.textContent.trim().replace("\n", " ").take(36).ifEmpty { "Plain Text" }
                             transferRepository.logTransfer(
                                 TransferRecord(
-                                    fileName = file.name,
-                                    fileType = "RECEIVED_FILE",
-                                    fileSize = file.length(),
+                                    fileName = "Text: $snippetPreview",
+                                    fileType = "PLAIN_TEXT",
+                                    fileSize = event.textContent.toByteArray(Charsets.UTF_8).size.toLong().coerceAtLeast(1L),
                                     direction = "RECEIVED",
                                     peerDeviceName = event.senderName,
-                                    durationMs = event.durationMs,
-                                    transferRateMbps = if (event.durationMs > 0) {
-                                        (event.totalBytes.toFloat() / (event.durationMs / 1000f)) / (1024f * 1024f)
-                                    } else 48f,
-                                    localUri = file.absolutePath,
+                                    durationMs = 150L,
+                                    transferRateMbps = 65f,
+                                    localUri = "beamtext://${event.textContent}",
                                     status = "COMPLETED"
                                 )
                             )
+                        }
+                    }
+                    dismissCompleted()
+                }
+                is IncomingTransferEvent.Completed -> {
+                    discoveryManager.setTransferActive(false)
+                    haptics.onTransferCompleted()
+                    if (event.savedFiles.isNotEmpty()) {
+                        _lastReceivedFile.value = event.savedFiles.firstOrNull()
+                    }
+                    currentIncomingTransferId = null
+
+                    // Save to Room DB if Save to History is enabled
+                    if (_saveToHistoryEnabled.value && event.savedFiles.isNotEmpty()) {
+                        viewModelScope.launch {
+                            event.savedFiles.forEach { file ->
+                                transferRepository.logTransfer(
+                                    TransferRecord(
+                                        fileName = file.name,
+                                        fileType = "RECEIVED_FILE",
+                                        fileSize = file.length(),
+                                        direction = "RECEIVED",
+                                        peerDeviceName = event.senderName,
+                                        durationMs = event.durationMs,
+                                        transferRateMbps = if (event.durationMs > 0) {
+                                            (event.totalBytes.toFloat() / (event.durationMs / 1000f)) / (1024f * 1024f)
+                                        } else 48f,
+                                        localUri = file.absolutePath,
+                                        status = "COMPLETED"
+                                    )
+                                )
+                            }
                         }
                     }
 
                     // Immediately clear active progress indicator and queue upon completion
                     dismissCompleted()
                 }
+                is IncomingTransferEvent.Cancelled -> {
+                    discoveryManager.setTransferActive(false)
+                    currentIncomingTransferId = null
+                    dismissCompleted()
+                }
                 is IncomingTransferEvent.Failed -> {
+                    discoveryManager.setTransferActive(false)
                     _isContactLocked.value = false
                     _auraIntensity.value = 0f
-                    var failedFileName = "Incoming Beam"
-                    var failedFileSize = 0L
-                    var failedPeerName = "Nearby Device"
+                    currentIncomingTransferId = null
+                    _transferQueue.value = emptyList()
 
-                    currentIncomingTransferId?.let { id ->
-                        val matching = _transferQueue.value.find { it.id == id }
-                        if (matching != null) {
-                            failedFileName = matching.fileName
-                            failedFileSize = matching.fileSize
-                            failedPeerName = matching.peerName
-                        }
-                        _transferQueue.value = _transferQueue.value.filter { it.id != id && it.isActive }
-                        currentIncomingTransferId = null
-                    }
-
-                    viewModelScope.launch {
-                        transferRepository.logTransfer(
-                            TransferRecord(
-                                fileName = failedFileName,
-                                fileType = "RECEIVED_FILE",
-                                fileSize = failedFileSize,
-                                direction = "RECEIVED",
-                                peerDeviceName = failedPeerName,
-                                durationMs = 0L,
-                                transferRateMbps = 0f,
-                                status = "FAILED",
-                                errorMessage = event.error
-                            )
-                        )
-                    }
                     _transferState.value = TransferState.Failed(null, event.error)
                     viewModelScope.launch {
                         delay(2200)
@@ -421,16 +526,15 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
     private fun observeNetworkPeers() {
         viewModelScope.launch {
             discoveryManager.discoveredPeers.collect { peerMap ->
-                val previousCount = _nearbyPeers.value.size
+                val previous = _nearbyPeers.value
                 val list = peerMap.values.toList()
-                val currentP2p = _nearbyPeers.value.filter { it.id.startsWith("p2p_") }
+                val currentP2p = previous.filter { it.id.startsWith("p2p_") }
                 val merged = list + currentP2p
-                _nearbyPeers.value = merged
-                if (merged.isNotEmpty() && previousCount == 0) {
-                    if (_auraIntensity.value < 0.35f) {
-                        _auraIntensity.value = 0.38f
+                if (previous != merged) {
+                    _nearbyPeers.value = merged
+                    if (merged.isNotEmpty() && previous.isEmpty()) {
+                        haptics.onApproachTick()
                     }
-                    haptics.onApproachTick()
                 }
             }
         }
@@ -439,31 +543,23 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
     private fun observeWifiDirectPeers() {
         viewModelScope.launch {
             wifiDirectManager.servicePeers.collect { servicePeerMap ->
-                val previousCount = _nearbyPeers.value.size
+                val previous = _nearbyPeers.value
                 val p2pPeers = servicePeerMap.values.toList()
-                val networkPeers = _nearbyPeers.value.filter { !it.id.startsWith("p2p_") }
+                val networkPeers = previous.filter { !it.id.startsWith("p2p_") }
                 val merged = networkPeers + p2pPeers
-                _nearbyPeers.value = merged
-                if (merged.isNotEmpty() && previousCount == 0) {
-                    if (_auraIntensity.value < 0.35f) {
-                        _auraIntensity.value = 0.38f
+                if (previous != merged) {
+                    _nearbyPeers.value = merged
+                    if (merged.isNotEmpty() && previous.isEmpty()) {
+                        haptics.onApproachTick()
                     }
-                    haptics.onApproachTick()
                 }
             }
         }
     }
 
     private fun loadDeviceMedia() {
-        viewModelScope.launch {
-            val realMedia = mediaLoader.loadDeviceMedia()
-            if (realMedia.isNotEmpty()) {
-                _mediaItems.value = realMedia
-            } else {
-                // If on fresh emulator without photos yet, provide an initial curated set that can be shared or replaced
-                loadInitialMedia()
-            }
-        }
+        // Keep _mediaItems strictly empty on startup; only files explicitly chosen from storage by the user appear
+        _mediaItems.value = emptyList()
     }
 
     private fun startSensorMonitoring() {
@@ -545,7 +641,6 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                     deviceName = deviceName,
                     p2pMacAddress = wifiDirectState.value.localDeviceAddress
                 )
-                wifiDirectManager.registerLocalService(ip)
             }
         }
         viewModelScope.launch {
@@ -687,31 +782,200 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
         _mediaItems.value = _mediaItems.value.map {
             if (it.id == item.id) it.copy(isSelected = !it.isSelected) else it
         }
-        val anySelected = _mediaItems.value.any { it.isSelected }
-        _auraIntensity.value = if (anySelected) 0.35f else 0f
     }
 
     fun clearSelection() {
-        _mediaItems.value = _mediaItems.value
-            .filterNot { it.id.startsWith("browsed_") }
-            .map { it.copy(isSelected = false) }
-        _auraIntensity.value = 0f
+        pendingTargetPeer = null
+        _mediaItems.value = emptyList()
+        if (_transferState.value is TransferState.Idle) {
+            _auraIntensity.value = 0f
+        }
     }
 
-    fun startPeerTransfer(peer: BeamPeer) {
+    fun toggleNfcScan() {
+        if (_isNfcScanning.value) {
+            dismissNfcScan()
+        } else {
+            _isNfcScanning.value = true
+            haptics.onApproachTick()
+            scanSubnetNow()
+            nfcScanJob?.cancel()
+            nfcScanJob = viewModelScope.launch {
+                delay(6500L)
+                _isNfcScanning.value = false
+            }
+        }
+    }
+
+    fun dismissNfcScan() {
+        nfcScanJob?.cancel()
+        nfcScanJob = null
+        _isNfcScanning.value = false
+    }
+
+    private var lastSwipePreviewTimeMs: Long = 0L
+    private var lastSwipeDirection: String = ""
+
+    /**
+     * Immediately triggers the directional Liquid Glass wave animation on BOTH the Android phone
+     * and the connected Windows app (via UDP BEAMDROP_AURA_PATH) when the user swipes right or left on a peer.
+     */
+    fun triggerDirectionalGlassWave(peer: BeamPeer, flowDirection: String, isLiveDrag: Boolean = false) {
+        val normalizedDirection = when (flowDirection.uppercase()) {
+            "LEFT" -> "LEFT"
+            "RIGHT" -> "RIGHT"
+            else -> "TOP"
+        }
+        val now = System.currentTimeMillis()
+        if (isLiveDrag && normalizedDirection == lastSwipeDirection && now - lastSwipePreviewTimeMs < 140L) {
+            return
+        }
+        if (!isLiveDrag || normalizedDirection != lastSwipeDirection) {
+            haptics.onApproachTick()
+        }
+        lastSwipePreviewTimeMs = now
+        lastSwipeDirection = normalizedDirection
+
+        val currentSessionId = if (_auraPathState.value.isActive && _auraPathState.value.stateToken == "SWIPE") {
+            _auraPathState.value.sessionId
+        } else {
+            "swipe_${UUID.randomUUID().toString().take(6)}"
+        }
+
+        val waveState = AuraPathState(
+            isActive = true,
+            sessionId = currentSessionId,
+            fileName = _mediaItems.value.firstOrNull { it.isSelected }?.title ?: "Liquid Glass Beam",
+            fileSizeBytes = _mediaItems.value.filter { it.isSelected }.sumOf { it.sizeBytes },
+            migrationProgress = if (isLiveDrag) 0.42f else 0.68f,
+            speedMbps = 0f,
+            isOutgoing = true,
+            sourceDeviceName = deviceName,
+            targetDeviceName = peer.name,
+            targetPeerId = peer.id,
+            flowDirection = normalizedDirection,
+            stateToken = "SWIPE",
+            sourceButtonOffset = measuredSourceButtonOffset,
+            targetDeviceOffset = measuredTargetPeerOffsets[peer.id] ?: measuredTargetPeerOffsets.values.firstOrNull(),
+            timestampMs = now
+        )
+        _auraPathState.value = waveState
+        discoveryManager.broadcastAuraPathSync(waveState, peer.ipAddress, "SWIPE")
+
+        directionalWavePreviewJob?.cancel()
+        directionalWavePreviewJob = viewModelScope.launch {
+            delay(2500L)
+            if (_transferState.value is TransferState.Idle && _auraPathState.value.stateToken == "SWIPE") {
+                _auraPathState.value = AuraPathState(isActive = false)
+            }
+        }
+    }
+
+    fun setPendingPeerForPicker(peer: BeamPeer?, flowDirection: String = "TOP") {
+        pendingTargetPeer = peer
+        pendingFlowDirection = flowDirection
+        if (peer != null) {
+            triggerDirectionalGlassWave(peer, flowDirection)
+        }
+    }
+
+    fun triggerPendingTransferIfReady() {
+        val target = pendingTargetPeer ?: return
+        val direction = pendingFlowDirection
+        val selectedFiles = _mediaItems.value.filter { it.isSelected }
+        if (selectedFiles.isNotEmpty()) {
+            pendingTargetPeer = null
+            pendingFlowDirection = "TOP"
+            executeTransfer(target, selectedFiles, direction)
+        }
+    }
+
+    fun startPeerTransfer(peer: BeamPeer, flowDirection: String = "TOP") {
+        triggerDirectionalGlassWave(peer, flowDirection)
         val selectedFiles = _mediaItems.value.filter { it.isSelected }
         val targetFiles = if (selectedFiles.isNotEmpty()) {
             selectedFiles
         } else {
-            listOf(_mediaItems.value.first())
+            val first = _mediaItems.value.firstOrNull() ?: return
+            listOf(first)
         }
-        executeTransfer(peer, targetFiles)
+        executeTransfer(peer, targetFiles, flowDirection)
     }
 
-    private fun executeTransfer(peer: BeamPeer, items: List<SharableItem>) {
+    /**
+     * Triggers the live directional Liquid Glass wave even if no receiver was manually selected yet.
+     */
+    fun previewSwipeOnStagedCard(flowDirection: String) {
+        val peer = pendingTargetPeer ?: _nearbyPeers.value.firstOrNull()
+            ?: BeamPeer(
+                id = "auto_receiver",
+                name = "Nearby Receiver",
+                ipAddress = "",
+                deviceType = DeviceType.COMPUTER
+            )
+        triggerDirectionalGlassWave(peer, flowDirection, isLiveDrag = true)
+    }
+
+    /**
+     * Automatically beams the staged file/folder/text when the user swipes >70% on the staged card,
+     * without requiring the user to touch or select a receiver card first.
+     */
+    fun swipeToSendStagedItems(flowDirection: String = "RIGHT") {
+        val selectedFiles = _mediaItems.value.filter { it.isSelected }
+        val targetFiles = if (selectedFiles.isNotEmpty()) {
+            selectedFiles
+        } else {
+            val first = _mediaItems.value.firstOrNull() ?: return
+            listOf(first)
+        }
+
+        val immediatePeer = pendingTargetPeer ?: _nearbyPeers.value.firstOrNull()
+        if (immediatePeer != null) {
+            triggerDirectionalGlassWave(immediatePeer, flowDirection)
+            executeTransfer(immediatePeer, targetFiles, flowDirection)
+            return
+        }
+
+        // If no peer is in the list yet, ignite the directional swipe animation, probe the subnet immediately,
+        // and auto-beam as soon as a receiver responds on the network!
+        val placeholderPeer = BeamPeer(
+            id = "auto_scan_peer",
+            name = "Scanning Receiver...",
+            ipAddress = "",
+            deviceType = DeviceType.COMPUTER
+        )
+        triggerDirectionalGlassWave(placeholderPeer, flowDirection)
+        scanSubnetNow()
+        viewModelScope.launch {
+            repeat(8) {
+                delay(260L)
+                val foundPeer = _nearbyPeers.value.firstOrNull()
+                if (foundPeer != null) {
+                    executeTransfer(foundPeer, targetFiles, flowDirection)
+                    return@launch
+                }
+            }
+        }
+    }
+
+    private fun executeTransfer(
+        peer: BeamPeer,
+        items: List<SharableItem>,
+        flowDirection: String = "TOP"
+    ) {
         transferJob?.cancel()
-        _isContactLocked.value = true
-        _auraIntensity.value = 0.8f
+        directionalWavePreviewJob?.cancel()
+        dismissNfcScan()
+        discoveryManager.setTransferActive(true)
+        activePeerIp = peer.ipAddress
+        _isContactLocked.value = false
+        _auraIntensity.value = 0f
+
+        val normalizedDirection = when (flowDirection.uppercase()) {
+            "LEFT" -> "LEFT"
+            "RIGHT" -> "RIGHT"
+            else -> "TOP"
+        }
 
         val sessionId = "aura_${UUID.randomUUID().toString().take(8)}"
         val targetOffset = measuredTargetPeerOffsets[peer.id] ?: measuredTargetPeerOffsets.values.firstOrNull()
@@ -726,6 +990,8 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
             sourceDeviceName = deviceName,
             targetDeviceName = peer.name,
             targetPeerId = peer.id,
+            flowDirection = normalizedDirection,
+            stateToken = "START",
             sourceButtonOffset = measuredSourceButtonOffset,
             targetDeviceOffset = targetOffset,
             timestampMs = System.currentTimeMillis()
@@ -744,14 +1010,14 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                 speedMbps = 0f,
                 direction = TransferDirection.UPLOAD,
                 peerName = peer.name,
-                status = QueueStatus.QUEUED,
+                status = QueueStatus.IN_PROGRESS,
                 mimeType = item.mimeType,
                 localUri = item.uri
             )
             qId to queued
         }
 
-        _transferQueue.value = batchTransferPairs.map { it.second } + _transferQueue.value
+        _transferQueue.value = batchTransferPairs.map { it.second }
 
         transferJob = viewModelScope.launch {
             val thisJob = coroutineContext[Job]!!
@@ -763,33 +1029,8 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
             var lastSpeed = 48.0f
 
             try {
-                transferEngine.sendFiles(peer, items, deviceName).collect { progress ->
+                transferEngine.sendFiles(peer, items, deviceName, normalizedDirection).collect { progress ->
                     lastSpeed = progress.currentSpeedMbps
-                    val currentIdx = progress.currentItemIndex
-
-                    _transferQueue.value = _transferQueue.value.mapNotNull { queueItem ->
-                        val itemIndex = batchTransferPairs.indexOfFirst { it.first == queueItem.id }
-                        if (itemIndex != -1) {
-                            when {
-                                itemIndex < currentIdx -> {
-                                    // Immediately remove already-completed items from the active queue
-                                    null
-                                }
-                                itemIndex == currentIdx -> {
-                                    queueItem.copy(
-                                        bytesTransferred = progress.bytesTransferred,
-                                        progress = progress.overallProgress,
-                                        speedMbps = progress.currentSpeedMbps,
-                                        etaSeconds = progress.etaSeconds,
-                                        status = QueueStatus.IN_PROGRESS
-                                    )
-                                }
-                                else -> {
-                                    queueItem.copy(status = QueueStatus.QUEUED)
-                                }
-                            }
-                        } else queueItem
-                    }
 
                     _transferState.value = TransferState.Transferring(
                         peer = peer,
@@ -810,37 +1051,39 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                         migrationProgress = progress.overallProgress.coerceIn(0f, 1f),
                         speedMbps = progress.currentSpeedMbps,
                         isOutgoing = true,
+                        flowDirection = normalizedDirection,
+                        stateToken = "MIGRATING",
                         sourceButtonOffset = measuredSourceButtonOffset,
                         targetDeviceOffset = measuredTargetPeerOffsets[peer.id] ?: measuredTargetPeerOffsets.values.firstOrNull(),
                         timestampMs = System.currentTimeMillis()
                     )
                     _auraPathState.value = updatedAura
                     discoveryManager.broadcastAuraPathSync(updatedAura, peer.ipAddress, "MIGRATING")
-
-                    haptics.onTransferChunkTick()
                 }
 
                 val durationMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
 
-                items.forEach { item ->
-                    transferRepository.logTransfer(
-                        TransferRecord(
-                            fileName = item.title,
-                            fileType = item.category.name,
-                            fileSize = item.sizeBytes,
-                            direction = "SENT",
-                            peerDeviceName = peer.name,
-                            durationMs = durationMs / items.size,
-                            transferRateMbps = lastSpeed,
-                            localUri = item.uri,
-                            status = "COMPLETED"
+                if (_saveToHistoryEnabled.value) {
+                    items.forEach { item ->
+                        transferRepository.logTransfer(
+                            TransferRecord(
+                                fileName = item.title,
+                                fileType = item.category.name,
+                                fileSize = item.sizeBytes,
+                                direction = "SENT",
+                                peerDeviceName = peer.name,
+                                durationMs = durationMs / items.size,
+                                transferRateMbps = lastSpeed,
+                                localUri = item.uri,
+                                status = "COMPLETED"
+                            )
                         )
-                    )
+                    }
                 }
 
                 haptics.onTransferCompleted()
                 discoveryManager.broadcastAuraPathSync(
-                    _auraPathState.value.copy(isActive = false, migrationProgress = 1.0f),
+                    _auraPathState.value.copy(isActive = false, migrationProgress = 1.0f, stateToken = "COMPLETED"),
                     peer.ipAddress,
                     "COMPLETED"
                 )
@@ -851,32 +1094,12 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
             } catch (e: Exception) {
                 Log.e(tag, "Failed to send files: ${e.message}", e)
                 val isCancelled = e is kotlinx.coroutines.CancellationException
-                val statusStr = if (isCancelled) "CANCELLED" else "FAILED"
                 val reasonStr = if (isCancelled) "Cancelled by user" else (e.message ?: "Connection failed to ${peer.name} (${peer.ipAddress})")
 
-                val batchIds = batchTransferPairs.map { it.first }.toSet()
-                _transferQueue.value = _transferQueue.value.filter { it.id !in batchIds && it.isActive }
-
-                // Persist failed or cancelled transfer logs to History DB
-                items.forEach { item ->
-                    transferRepository.logTransfer(
-                        TransferRecord(
-                            fileName = item.title,
-                            fileType = item.category.name,
-                            fileSize = item.sizeBytes,
-                            direction = "SENT",
-                            peerDeviceName = peer.name,
-                            durationMs = (System.currentTimeMillis() - startTime).coerceAtLeast(0),
-                            transferRateMbps = 0f,
-                            localUri = item.uri,
-                            status = statusStr,
-                            errorMessage = reasonStr
-                        )
-                    )
-                }
-
+                _transferQueue.value = emptyList()
                 _isContactLocked.value = false
                 _auraIntensity.value = 0f
+                _auraPathState.value = AuraPathState(isActive = false)
                 if (!isCancelled) {
                     _transferState.value = TransferState.Failed(peer, reasonStr)
                     viewModelScope.launch {
@@ -889,13 +1112,206 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
                     dismissCompleted()
                 }
             } finally {
+                discoveryManager.setTransferActive(false)
                 batchTransferPairs.forEach { (id, _) -> activeTransferJobs.remove(id) }
             }
         }
     }
 
     fun addManualPeerIp(ip: String) {
-        discoveryManager.addManualPeer(ip, 8988, "Manual ($ip)")
+        val cleaned = ip.trim().removePrefix("#")
+        if (cleaned.isEmpty()) return
+        val fullIp = if (!cleaned.contains(".") && localIpAddress.value.contains(".")) {
+            localIpAddress.value.substringBeforeLast(".") + "." + cleaned
+        } else {
+            cleaned
+        }
+        discoveryManager.addManualPeer(fullIp, 8988, "Manual ($fullIp)")
+    }
+
+    /**
+     * Connects to a peer via a scanned QR code payload, beamdrop:// URI, http:// web bridge URL, or IP/#Octet.
+     * Supports both same-network direct TCP connection and cross-network Wi-Fi Hotspot / Web Bridge pairing.
+     */
+    fun connectViaQrCode(rawPayload: String): String {
+        val trimmed = rawPayload.trim()
+        if (trimmed.isEmpty()) return ""
+
+        var extractedIp = ""
+        var extractedPort = 8988
+        var extractedName = "QR Connected Device"
+
+        try {
+            if (trimmed.startsWith("beamdrop://", ignoreCase = true) || trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+                val uri = Uri.parse(trimmed)
+                uri.getQueryParameter("ip")?.takeIf { it.isNotBlank() }?.let { extractedIp = it }
+                if (extractedIp.isEmpty() && !uri.host.isNullOrBlank() && uri.host != "connect") {
+                    extractedIp = uri.host!!
+                }
+                uri.getQueryParameter("port")?.toIntOrNull()?.let { extractedPort = it }
+                uri.getQueryParameter("tcp")?.toIntOrNull()?.let { extractedPort = it }
+                uri.getQueryParameter("name")?.takeIf { it.isNotBlank() }?.let { extractedName = it }
+                uri.getQueryParameter("peer")?.takeIf { it.isNotBlank() }?.let { extractedName = it }
+            } else if (trimmed.contains("|")) {
+                // BEAMDROP_QR|ip|port|name
+                val parts = trimmed.split("|")
+                extractedIp = parts.firstOrNull { it.count { c -> c == '.' } == 3 }.orEmpty()
+                extractedName = parts.lastOrNull { it.isNotBlank() && !it.all { c -> c.isDigit() } } ?: extractedName
+            } else {
+                val clean = trimmed.removePrefix("#")
+                extractedIp = if (!clean.contains(".") && localIpAddress.value.contains(".")) {
+                    localIpAddress.value.substringBeforeLast(".") + "." + clean
+                } else {
+                    clean
+                }
+            }
+        } catch (_: Exception) {
+            extractedIp = trimmed.removePrefix("#")
+        }
+
+        if (extractedIp.isBlank()) return ""
+
+        val devType = if (extractedName.contains("Windows", ignoreCase = true) ||
+            extractedName.contains("PC", ignoreCase = true) ||
+            extractedName.contains("VICTUS", ignoreCase = true)
+        ) {
+            DeviceType.COMPUTER
+        } else {
+            DeviceType.PHONE
+        }
+
+        discoveryManager.registerHandshakePeer(
+            peerId = "qr_$extractedIp",
+            peerName = extractedName,
+            peerIp = extractedIp,
+            port = extractedPort,
+            deviceType = devType
+        )
+        discoveryManager.addManualPeer(extractedIp, extractedPort, extractedName)
+
+        val qrPeer = BeamPeer(
+            id = "qr_$extractedIp",
+            name = extractedName,
+            ipAddress = extractedIp,
+            port = extractedPort,
+            deviceType = devType
+        )
+        triggerDirectionalGlassWave(qrPeer, "TOP")
+
+        val staged = _mediaItems.value.filter { it.isSelected }
+        if (staged.isNotEmpty()) {
+            executeTransfer(qrPeer, staged, "TOP")
+        }
+        return extractedIp
+    }
+
+    fun setCustomSaveFolder(treeUri: String?, folderDisplayName: String) {
+        RealTransferEngine.setCustomSaveFolder(getApplication(), treeUri, folderDisplayName)
+        _saveFolderDisplayName.value = RealTransferEngine.getSaveFolderDisplayName(getApplication())
+    }
+
+    fun setThemeMode(mode: String) {
+        _themeMode.value = mode
+        ActiveBeamThemeState.update(mode, _colorTheme.value)
+        prefs.edit().putString("theme_mode", mode).apply()
+    }
+
+    fun setColorTheme(color: String) {
+        _colorTheme.value = color
+        ActiveBeamThemeState.update(_themeMode.value, color)
+        prefs.edit().putString("color_theme", color).apply()
+    }
+
+    fun setLanguageSetting(lang: String) {
+        _languageSetting.value = lang
+        prefs.edit().putString("language_setting", lang).apply()
+    }
+
+    fun setMinimizeToTray(enabled: Boolean) {
+        _minimizeToTray.value = enabled
+        prefs.edit().putBoolean("minimize_to_tray", enabled).apply()
+    }
+
+    fun setAutostartAfterLogin(enabled: Boolean) {
+        _autostartAfterLogin.value = enabled
+        prefs.edit().putBoolean("autostart_after_login", enabled).apply()
+    }
+
+    fun setAnimationsEnabled(enabled: Boolean) {
+        _animationsEnabled.value = enabled
+        prefs.edit().putBoolean("animations_enabled", enabled).apply()
+        if (!enabled) {
+            _auraIntensity.value = 0f
+            _isContactLocked.value = false
+            _auraPathState.value = AuraPathState(isActive = false)
+        }
+    }
+
+    fun setQuickSaveEnabled(enabled: Boolean) {
+        _quickSaveEnabled.value = enabled
+        prefs.edit().putBoolean("quick_save", enabled).apply()
+    }
+
+    fun setQuickSaveFavorites(enabled: Boolean) {
+        _quickSaveFavorites.value = enabled
+        prefs.edit().putBoolean("quick_save_favorites", enabled).apply()
+    }
+
+    fun setRequirePinEnabled(enabled: Boolean) {
+        _requirePinEnabled.value = enabled
+        prefs.edit().putBoolean("require_pin", enabled).apply()
+    }
+
+    fun setAutoFinishEnabled(enabled: Boolean) {
+        _autoFinishEnabled.value = enabled
+        prefs.edit().putBoolean("auto_finish", enabled).apply()
+    }
+
+    fun setSaveToHistoryEnabled(enabled: Boolean) {
+        _saveToHistoryEnabled.value = enabled
+        prefs.edit().putBoolean("save_to_history", enabled).apply()
+    }
+
+    fun setAdvancedSettingsEnabled(enabled: Boolean) {
+        _advancedSettingsEnabled.value = enabled
+        prefs.edit().putBoolean("advanced_settings", enabled).apply()
+    }
+
+    fun updateCustomDeviceName(newName: String) {
+        val cleaned = newName.trim().ifEmpty { defaultDeviceName }
+        _customDeviceName.value = cleaned
+        prefs.edit().putString("custom_device_name", cleaned).apply()
+        restartNetworkAndServer()
+    }
+
+    fun restartNetworkAndServer() {
+        viewModelScope.launch {
+            haptics.onApproachTick()
+            transferEngine.stopServer()
+            webShareServer.stop()
+            discoveryManager.stop()
+            delay(180L)
+            discoveryManager.start()
+            startRealTransferServer()
+            webShareServer.start()
+            _isServerRunning.value = true
+            scanSubnetNow()
+        }
+    }
+
+    fun stopReceiveServer() {
+        haptics.onApproachTick()
+        transferEngine.stopServer()
+        webShareServer.stop()
+        _isServerRunning.value = false
+    }
+
+    fun dismissLastReceivedFile() {
+        _lastReceivedFile.value = null
+    }
+
+    fun dismissReceivedTextPopup() {
+        _receivedTextPopup.value = null
     }
 
     fun scanSubnetNow() {
@@ -921,6 +1337,17 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
     fun cancelQueuedTransfer(transferId: String) {
         val job = activeTransferJobs.remove(transferId)
         job?.cancel()
+        transferEngine.cancelActiveTransfers()
+        webShareServer.cancelActiveWebTransfers()
+        val peerIp = activePeerIp
+        discoveryManager.broadcastAuraPathSync(
+            _auraPathState.value.copy(isActive = false, stateToken = "CANCELLED"),
+            peerIp,
+            "CANCELLED"
+        )
+        if (!peerIp.isNullOrBlank()) {
+            transferEngine.sendCancelSignalToPeer(peerIp, 8988, deviceName)
+        }
         _transferQueue.value = _transferQueue.value.filter { it.id != transferId && it.isActive }
         if (_transferQueue.value.isEmpty()) {
             dismissCompleted()
@@ -928,10 +1355,24 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun cancelAllActiveTransfers() {
+        val peerIp = activePeerIp ?: when (val st = _transferState.value) {
+            is TransferState.Transferring -> st.peer.ipAddress
+            is TransferState.HandshakeReady -> st.peer.ipAddress
+            else -> null
+        }
+        val cancelledAura = _auraPathState.value.copy(isActive = false, stateToken = "CANCELLED")
+        discoveryManager.broadcastAuraPathSync(cancelledAura, peerIp, "CANCELLED")
+        if (!peerIp.isNullOrBlank()) {
+            transferEngine.sendCancelSignalToPeer(peerIp, 8988, deviceName)
+        }
+        transferEngine.cancelActiveTransfers()
+        webShareServer.cancelActiveWebTransfers()
         activeTransferJobs.values.forEach { it.cancel() }
         activeTransferJobs.clear()
         transferJob?.cancel()
         transferJob = null
+        currentIncomingTransferId = null
+        activePeerIp = null
         dismissCompleted()
     }
 
@@ -1045,6 +1486,7 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
             sourceDeviceName = deviceName,
             targetDeviceName = peer.name,
             targetPeerId = peer.id,
+            flowDirection = _auraPathState.value.flowDirection.ifBlank { "TOP" },
             sourceButtonOffset = measuredSourceButtonOffset,
             targetDeviceOffset = measuredTargetPeerOffsets[peer.id] ?: measuredTargetPeerOffsets.values.firstOrNull(),
             timestampMs = System.currentTimeMillis()
@@ -1092,24 +1534,27 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
 
         _mediaItems.value = listOf(newItem) + _mediaItems.value
         _selectedCategory.value = category
-        _auraIntensity.value = 0.45f
     }
 
     fun addTextSnippet(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        try {
-            val file = File(getApplication<Application>().cacheDir, "Text_${System.currentTimeMillis() % 100000}.txt")
-            file.writeText(trimmed)
-            addCustomFile(
-                name = file.name,
-                sizeBytes = file.length().coerceAtLeast(1L),
-                mimeType = "text/plain",
-                uri = file.absolutePath
-            )
-        } catch (e: Exception) {
-            Log.e(tag, "Failed to stage text snippet: ${e.message}")
-        }
+        val previewLine = trimmed.replace("\n", " ").take(48).ifEmpty { "Plain Text" }
+        val utf8Bytes = trimmed.toByteArray(Charsets.UTF_8)
+        val newItem = SharableItem(
+            id = "browsed_text_${UUID.randomUUID()}",
+            title = previewLine,
+            subtitle = "Plain Text • Receiver Copy Pop-up",
+            sizeBytes = utf8Bytes.size.toLong().coerceAtLeast(1L),
+            mimeType = "text/plain;beamdrop-raw",
+            category = ShareCategory.DOCUMENTS,
+            uri = "beamtext://$trimmed",
+            isSelected = true,
+            dateAdded = "Plain Text"
+        )
+        _mediaItems.value = listOf(newItem) + _mediaItems.value
+        _selectedCategory.value = ShareCategory.DOCUMENTS
+        triggerPendingTransferIfReady()
     }
 
     private fun loadInitialMedia() {

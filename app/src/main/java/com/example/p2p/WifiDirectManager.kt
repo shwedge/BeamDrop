@@ -90,11 +90,7 @@ class WifiDirectManager(
                 val enabled = (state == WifiP2pManager.WIFI_P2P_STATE_ENABLED)
                 _isP2pEnabled.value = enabled
                 Log.d(tag, "Wi-Fi P2P state changed: enabled=$enabled")
-                if (enabled) {
-                    registerLocalService()
-                    discoverPeers()
-                    discoverServices()
-                } else {
+                if (!enabled) {
                     _p2pPeers.value = emptyList()
                     _servicePeers.value = emptyMap()
                     _connectionState.value = _connectionState.value.copy(
@@ -288,10 +284,7 @@ class WifiDirectManager(
             }
         }
 
-        registerLocalService()
         setupServiceDiscoveryListeners()
-        discoverPeers()
-        discoverServices()
     }
 
     fun stop() {

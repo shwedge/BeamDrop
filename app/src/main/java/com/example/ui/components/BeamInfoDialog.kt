@@ -64,19 +64,16 @@ fun BeamInfoDialog(
         },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(listOf(ElectricCyan, RadiantPurple))
-                        ),
-                    contentAlignment = Alignment.Center
+                GlassLiquidIconOrb(
+                    size = 38.dp,
+                    cornerRadius = 13.dp,
+                    tintColor = ElectricCyan,
+                    secondaryColor = RadiantPurple
                 ) {
                     Icon(
                         imageVector = Icons.Default.Bolt,
                         contentDescription = null,
-                        tint = CyberBlack,
+                        tint = TextPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -117,8 +114,8 @@ fun BeamInfoDialog(
 
                 InfoFeatureRow(
                     icon = Icons.Default.Bolt,
-                    title = "Fluid Aurora Ripple & Self-Dismissing HUD",
-                    description = "Glowing aura ripples expand on peer discovery, while a discreet progress capsule self-dismisses immediately upon completion.",
+                    title = "Glass Liquid Wave & Self-Dismissing HUD",
+                    description = "Translucent glass liquid waves flow directionally across devices while a discreet progress capsule self-dismisses upon completion.",
                     tint = SolarAmber
                 )
 
@@ -127,6 +124,13 @@ fun BeamInfoDialog(
                     title = "Windows 10/11 Native App (BeamDrop.exe)",
                     description = "Located in /windows/BeamDrop.exe (and BeamDropWindows.cs / Run-BeamDrop.bat), or downloadable wirelessly from your phone at port 8990.",
                     tint = ElectricCyan
+                )
+
+                InfoFeatureRow(
+                    icon = Icons.Default.Bolt,
+                    title = "Developed by Sajjad Hossain Mridul",
+                    description = "Created & architected by Sajjad Hossain Mridul and the BeamDrop Staff for seamless Android & Windows local continuity.",
+                    tint = NeonTeal
                 )
             }
         },
@@ -146,12 +150,11 @@ private fun InfoFeatureRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top
     ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(tint.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
+        GlassLiquidIconOrb(
+            size = 34.dp,
+            cornerRadius = 11.dp,
+            tintColor = tint,
+            secondaryColor = ElectricCyan
         ) {
             Icon(
                 imageVector = icon,
