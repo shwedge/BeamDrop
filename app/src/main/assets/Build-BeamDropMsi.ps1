@@ -163,20 +163,42 @@ try {
     $desktopShortcut.TargetPath = $installedExe
     $desktopShortcut.WorkingDirectory = $installDir
     $desktopShortcut.Description = "BeamDrop Continuity - Published by Sajjad Hossain Mridul"
-    if (Test-Path -LiteralPath (Join-Path $installDir "BeamDrop.ico")) {
-        $desktopShortcut.IconLocation = (Join-Path $installDir "BeamDrop.ico")
-    }
+    $desktopShortcut.IconLocation = "$installedExe,0"
     $desktopShortcut.Save()
+    (Get-Item -LiteralPath (Join-Path $desktopPath "BeamDrop Continuity.lnk")).LastWriteTime = Get-Date
+
+    # Also handle OneDrive Desktop redirection if present
+    $oneDriveDesktop = [System.IO.Path]::Combine($env:USERPROFILE, "OneDrive\Desktop")
+    if ((Test-Path -LiteralPath $oneDriveDesktop) -and ($oneDriveDesktop -ne $desktopPath)) {
+        $odShortcut = $wsh.CreateShortcut((Join-Path $oneDriveDesktop "BeamDrop Continuity.lnk"))
+        $odShortcut.TargetPath = $installedExe
+        $odShortcut.WorkingDirectory = $installDir
+        $odShortcut.Description = "BeamDrop Continuity - Published by Sajjad Hossain Mridul"
+        $odShortcut.IconLocation = "$installedExe,0"
+        $odShortcut.Save()
+        (Get-Item -LiteralPath (Join-Path $oneDriveDesktop "BeamDrop Continuity.lnk")).LastWriteTime = Get-Date
+    }
 
     $startMenuPath = [Environment]::GetFolderPath("Programs")
     $startShortcut = $wsh.CreateShortcut((Join-Path $startMenuPath "BeamDrop Continuity.lnk"))
     $startShortcut.TargetPath = $installedExe
     $startShortcut.WorkingDirectory = $installDir
     $startShortcut.Description = "BeamDrop Continuity - Published by Sajjad Hossain Mridul"
-    if (Test-Path -LiteralPath (Join-Path $installDir "BeamDrop.ico")) {
-        $startShortcut.IconLocation = (Join-Path $installDir "BeamDrop.ico")
-    }
+    $startShortcut.IconLocation = "$installedExe,0"
     $startShortcut.Save()
+    (Get-Item -LiteralPath (Join-Path $startMenuPath "BeamDrop Continuity.lnk")).LastWriteTime = Get-Date
+
+    # Force Windows Shell Icon Cache refresh
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class ShellNotifier {
+    [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+}
+"@ -ErrorAction SilentlyContinue
+    [ShellNotifier]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+
     Write-Host "      Created Desktop and Start Menu shortcuts with BeamDrop Logo." -ForegroundColor Green
 } catch {}
 
