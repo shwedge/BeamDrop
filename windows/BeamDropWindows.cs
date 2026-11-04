@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿﻿﻿﻿﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -358,6 +358,8 @@ namespace BeamDropWindows
         public bool TurboSpeedMode { get; set; }
         public bool AnimationsEnabled { get; set; }
         public bool AutoFinishEnabled { get; set; }
+        public string ThemeMode { get; set; }
+        public string ColorTheme { get; set; }
 
         public BeamDropSettings()
         {
@@ -371,6 +373,8 @@ namespace BeamDropWindows
             TurboSpeedMode = true;
             AnimationsEnabled = true;
             AutoFinishEnabled = true;
+            ThemeMode = "Dark";
+            ColorTheme = "LocalSend";
         }
 
         private static string GetConfigPath()
@@ -400,6 +404,8 @@ namespace BeamDropWindows
                     s.TurboSpeedMode = ExtractJsonBool(json, "TurboSpeedMode", s.TurboSpeedMode);
                     s.AnimationsEnabled = ExtractJsonBool(json, "AnimationsEnabled", s.AnimationsEnabled);
                     s.AutoFinishEnabled = ExtractJsonBool(json, "AutoFinishEnabled", s.AutoFinishEnabled);
+                    s.ThemeMode = ExtractJsonString(json, "ThemeMode", s.ThemeMode);
+                    s.ColorTheme = ExtractJsonString(json, "ColorTheme", s.ColorTheme);
                 }
             }
             catch { }
@@ -422,7 +428,9 @@ namespace BeamDropWindows
                 sb.AppendLine(string.Format("  \"AutoAcceptFiles\": {0},", AutoAcceptFiles.ToString().ToLowerInvariant()));
                 sb.AppendLine(string.Format("  \"TurboSpeedMode\": {0},", TurboSpeedMode.ToString().ToLowerInvariant()));
                 sb.AppendLine(string.Format("  \"AnimationsEnabled\": {0},", AnimationsEnabled.ToString().ToLowerInvariant()));
-                sb.AppendLine(string.Format("  \"AutoFinishEnabled\": {0}", AutoFinishEnabled.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"AutoFinishEnabled\": {0},", AutoFinishEnabled.ToString().ToLowerInvariant()));
+                sb.AppendLine(string.Format("  \"ThemeMode\": \"{0}\",", EscapeJson(ThemeMode)));
+                sb.AppendLine(string.Format("  \"ColorTheme\": \"{0}\"", EscapeJson(ColorTheme)));
                 sb.AppendLine("}");
                 File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
             }
@@ -1594,6 +1602,13 @@ namespace BeamDropWindows
 
         private CancellationTokenSource _cts = new CancellationTokenSource();
         private CancellationTokenSource _activeTransferCts;
+        private TcpClient _activeIncomingTcpClient;
+        private TcpClient _activeOutgoingTcpClient;
+        private string _activeTransferPeerIp;
+        private string _activeTransferPeerName;
+        private volatile bool _isTransferCancelled = false;
+        private readonly List<string> _currentReceivingTempFiles = new List<string>();
+        private readonly object _transferLock = new object();
         private DispatcherTimer _peerPruneTimer;
         private System.Windows.Forms.NotifyIcon _trayIcon;
 
@@ -1693,6 +1708,7 @@ namespace BeamDropWindows
         private Color _currentTextPrimary;
         private Color _currentTextSecondary;
         private Color _currentMintAccent;
+        private Color _currentSecondaryAccent;
 
         // Dynamic Theme Color Accessors
         private Color CardSurface { get { return _currentCardSurface; } }
@@ -1702,26 +1718,137 @@ namespace BeamDropWindows
 
         private void SetThemeColors(bool dark)
         {
-            _isDarkMode = dark;
-            if (dark)
+            SetThemeColors(dark ? "Dark" : "System", _settings != null ? _settings.ColorTheme : "LocalSend");
+        }
+
+        private void SetThemeColors(string themeMode, string colorTheme)
+        {
+            themeMode = string.IsNullOrEmpty(themeMode) ? "Dark" : themeMode;
+            colorTheme = string.IsNullOrEmpty(colorTheme) ? "LocalSend" : colorTheme;
+
+            Color primary;
+            Color secondary;
+            Color darkBackdrop;
+
+            switch (colorTheme.ToLowerInvariant())
             {
-                _currentBg = BgDark;
-                _currentSidebarBg = SidebarBgDark;
-                _currentCardSurface = CardSurfaceDark;
-                _currentCardBorder = CardBorderDark;
-                _currentTextPrimary = TextPrimaryDark;
-                _currentTextSecondary = TextSecondaryDark;
-                _currentMintAccent = MintAccent;
+                case "ios 26 clear":
+                    primary = Color.FromRgb(125, 211, 252);   // #7DD3FC
+                    secondary = Color.FromRgb(56, 189, 248);  // #38BDF8
+                    darkBackdrop = Color.FromRgb(24, 52, 78);
+                    break;
+                case "sapphire blue":
+                    primary = Color.FromRgb(96, 165, 250);   // #60A5FA
+                    secondary = Color.FromRgb(37, 99, 235);   // #2563EB
+                    darkBackdrop = Color.FromRgb(10, 23, 48);
+                    break;
+                case "royal violet":
+                    primary = Color.FromRgb(192, 132, 252);  // #C084FC
+                    secondary = Color.FromRgb(139, 92, 246);  // #8B5CF6
+                    darkBackdrop = Color.FromRgb(20, 10, 38);
+                    break;
+                case "emerald glass":
+                    primary = Color.FromRgb(52, 211, 153);   // #34D399
+                    secondary = Color.FromRgb(16, 185, 129);  // #10B981
+                    darkBackdrop = Color.FromRgb(7, 38, 30);
+                    break;
+                case "sunset rose":
+                    primary = Color.FromRgb(251, 113, 133);  // #FB7185
+                    secondary = Color.FromRgb(244, 63, 94);   // #F43F5E
+                    darkBackdrop = Color.FromRgb(46, 16, 34);
+                    break;
+                case "cyber gold":
+                    primary = Color.FromRgb(251, 191, 36);   // #FBBF24
+                    secondary = Color.FromRgb(245, 158, 11);  // #F59E0B
+                    darkBackdrop = Color.FromRgb(41, 29, 8);
+                    break;
+                case "crimson ruby":
+                    primary = Color.FromRgb(248, 113, 113);  // #F87171
+                    secondary = Color.FromRgb(239, 68, 68);   // #EF4444
+                    darkBackdrop = Color.FromRgb(45, 12, 17);
+                    break;
+                case "arctic cyan":
+                    primary = Color.FromRgb(34, 211, 238);   // #22D3EE
+                    secondary = Color.FromRgb(6, 182, 212);   // #06B6D4
+                    darkBackdrop = Color.FromRgb(8, 38, 48);
+                    break;
+                default: // "LocalSend"
+                    primary = Color.FromRgb(94, 234, 212);   // #5EEAD4
+                    secondary = Color.FromRgb(56, 189, 248);  // #38BDF8
+                    darkBackdrop = Color.FromRgb(10, 22, 24);
+                    break;
+            }
+
+            _currentMintAccent = primary;
+            _currentSecondaryAccent = secondary;
+
+            string modeLower = themeMode.ToLowerInvariant();
+            bool isSystem = modeLower == "system";
+            bool isIosClear = modeLower.Contains("ios") || modeLower.Contains("clear");
+            bool isMidnight = modeLower.Contains("midnight");
+
+            if (isSystem)
+            {
+                bool isSysDark = true;
+                try
+                {
+                    using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                    {
+                        if (key != null)
+                        {
+                            object val = key.GetValue("AppsUseLightTheme");
+                            if (val is int && (int)val == 1) isSysDark = false;
+                        }
+                    }
+                }
+                catch { }
+
+                if (!isSysDark)
+                {
+                    _isDarkMode = false;
+                    _currentBg = BgLight;
+                    _currentSidebarBg = SidebarBgLight;
+                    _currentCardSurface = CardSurfaceLight;
+                    _currentCardBorder = CardBorderLight;
+                    _currentTextPrimary = TextPrimaryLight;
+                    _currentTextSecondary = TextSecondaryLight;
+                    return;
+                }
+            }
+
+            _isDarkMode = true;
+            if (isMidnight)
+            {
+                _currentBg = Color.FromRgb(3, 5, 8);
+                _currentSidebarBg = Color.FromRgb(7, 12, 18);
+                _currentCardSurface = Color.FromRgb(10, 16, 23);
+                _currentCardBorder = Color.FromArgb(70, primary.R, primary.G, primary.B);
+                _currentTextPrimary = Color.FromRgb(248, 250, 252);
+                _currentTextSecondary = Color.FromRgb(148, 163, 184);
+            }
+            else if (isIosClear)
+            {
+                _currentBg = Color.FromRgb(26, 52, 77);
+                _currentSidebarBg = Color.FromRgb(20, 43, 66);
+                _currentCardSurface = Color.FromArgb(200, 46, 85, 122);
+                _currentCardBorder = Color.FromArgb(180, 255, 255, 255);
+                _currentTextPrimary = Color.FromRgb(248, 250, 252);
+                _currentTextSecondary = Color.FromRgb(203, 213, 225);
             }
             else
             {
-                _currentBg = BgLight;
-                _currentSidebarBg = SidebarBgLight;
-                _currentCardSurface = CardSurfaceLight;
-                _currentCardBorder = CardBorderLight;
-                _currentTextPrimary = TextPrimaryLight;
-                _currentTextSecondary = TextSecondaryLight;
-                _currentMintAccent = Color.FromRgb(13, 148, 136); // #0D9488 high contrast on light
+                _currentBg = darkBackdrop;
+                _currentSidebarBg = Color.FromRgb(
+                    (byte)Math.Max(0, darkBackdrop.R - 3),
+                    (byte)Math.Max(0, darkBackdrop.G - 3),
+                    (byte)Math.Max(0, darkBackdrop.B - 3));
+                _currentCardSurface = Color.FromArgb(210,
+                    (byte)Math.Min(255, darkBackdrop.R + 14),
+                    (byte)Math.Min(255, darkBackdrop.G + 18),
+                    (byte)Math.Min(255, darkBackdrop.B + 20));
+                _currentCardBorder = Color.FromArgb(75, primary.R, primary.G, primary.B);
+                _currentTextPrimary = Color.FromRgb(248, 250, 252);
+                _currentTextSecondary = Color.FromRgb(148, 179, 170);
             }
         }
 
@@ -1731,7 +1858,7 @@ namespace BeamDropWindows
             ApplyTitleBarTheme(_isDarkMode);
         }
 
-        public static void ApplyHwndTitleBar(IntPtr hwnd, bool dark)
+        public static void ApplyHwndTitleBar(IntPtr hwnd, bool dark, Color? bg = null)
         {
             try
             {
@@ -1742,11 +1869,11 @@ namespace BeamDropWindows
                     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useDark, sizeof(int));
                 }
 
-                // Windows 11 custom caption color (0x00BBGGRR format)
-                int captionColor = dark ? 0x0012150B : 0x00F7F9F5;
+                Color c = bg ?? (dark ? Color.FromRgb(11, 21, 18) : Color.FromRgb(245, 249, 247));
+                int captionColor = (c.B << 16) | (c.G << 8) | c.R;
                 DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
 
-                int textColor = dark ? 0x00F5FDEC : 0x0022290F;
+                int textColor = dark ? 0x00F8FAFC : 0x000F172A;
                 DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref textColor, sizeof(int));
             }
             catch { }
@@ -1755,13 +1882,20 @@ namespace BeamDropWindows
         private void ApplyTitleBarTheme(bool dark)
         {
             var helper = new WindowInteropHelper(this);
-            ApplyHwndTitleBar(helper.Handle, dark);
+            ApplyHwndTitleBar(helper.Handle, dark, _currentBg);
         }
 
         private void ApplyTheme(bool dark)
         {
-            SetThemeColors(dark);
-            _settings.IsDarkMode = dark;
+            ApplyThemePalette(dark ? "Dark" : "System", _settings != null ? _settings.ColorTheme : "LocalSend");
+        }
+
+        private void ApplyThemePalette(string themeMode, string colorTheme)
+        {
+            SetThemeColors(themeMode, colorTheme);
+            _settings.ThemeMode = themeMode;
+            _settings.ColorTheme = colorTheme;
+            _settings.IsDarkMode = _isDarkMode;
             _settings.Save();
 
             Background = new SolidColorBrush(_currentBg);
@@ -1781,7 +1915,7 @@ namespace BeamDropWindows
                 _authorInfoText.Foreground = new SolidColorBrush(_currentTextSecondary);
             }
 
-            ApplyTitleBarTheme(dark);
+            ApplyTitleBarTheme(_isDarkMode);
             RebuildViews();
         }
 
@@ -1893,6 +2027,94 @@ namespace BeamDropWindows
             catch { }
         }
 
+        private void CancelActiveTransfer(bool initiatedLocally = true)
+        {
+            string peerIp = null;
+            TcpClient inClient = null;
+            TcpClient outClient = null;
+
+            lock (_transferLock)
+            {
+                _isTransferCancelled = true;
+                peerIp = _activeTransferPeerIp;
+                inClient = _activeIncomingTcpClient;
+                outClient = _activeOutgoingTcpClient;
+
+                try
+                {
+                    if (_activeTransferCts != null && !_activeTransferCts.IsCancellationRequested)
+                    {
+                        _activeTransferCts.Cancel();
+                    }
+                }
+                catch { }
+
+                try { if (inClient != null) inClient.Close(); } catch { }
+                try { if (outClient != null) outClient.Close(); } catch { }
+            }
+
+            if (initiatedLocally && !string.IsNullOrEmpty(peerIp))
+            {
+                BroadcastAuraPathSync(peerIp, "CANCELLED");
+                SendTcpCancelSignalToPeer(peerIp, TCP_PORT, _deviceName);
+            }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _isTransferring = false;
+                _auraPathState.IsActive = false;
+                HideTransferOverlay();
+            }));
+
+            CleanupPartialReceivingFiles();
+        }
+
+        private void CleanupPartialReceivingFiles()
+        {
+            lock (_transferLock)
+            {
+                foreach (var path in _currentReceivingTempFiles)
+                {
+                    try
+                    {
+                        if (File.Exists(path))
+                        {
+                            File.Delete(path);
+                        }
+                    }
+                    catch { }
+                }
+                _currentReceivingTempFiles.Clear();
+            }
+        }
+
+        private void SendTcpCancelSignalToPeer(string ip, int port, string deviceName)
+        {
+            if (string.IsNullOrEmpty(ip)) return;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    using (var client = new TcpClient())
+                    {
+                        client.NoDelay = true;
+                        client.SendTimeout = 2000;
+                        var connectTask = client.ConnectAsync(ip, port);
+                        if (await Task.WhenAny(connectTask, Task.Delay(1500)) == connectTask)
+                        {
+                            using (var stream = client.GetStream())
+                            {
+                                byte[] cancelBytes = Encoding.UTF8.GetBytes(string.Format("BEAMDROP_CANCEL|{0}\n", deviceName));
+                                await stream.WriteAsync(cancelBytes, 0, cancelBytes.Length);
+                                await stream.FlushAsync();
+                            }
+                        }
+                    }
+                }
+                catch { }
+            });
+        }
+
         private void PlayCompletionChime()
         {
             try
@@ -1940,7 +2162,7 @@ namespace BeamDropWindows
             _animationsEnabled = _settings.AnimationsEnabled;
             _autoFinishEnabled = _settings.AutoFinishEnabled;
 
-            SetThemeColors(_isDarkMode);
+            SetThemeColors(_settings.ThemeMode, _settings.ColorTheme);
 
             _localIp = ResolveBestLocalIp();
             _deviceId = "win_" + Math.Abs((_deviceName + "_" + _localIp).GetHashCode() % 1000000);
@@ -2578,10 +2800,11 @@ namespace BeamDropWindows
                 Margin = new Thickness(0, 0, 0, 24)
             });
 
-            // 1. General & Appearance Card
+            // 1. General & Appearance Card (matches Android Theme & Color palettes)
             StackPanel generalRows;
             var generalCard = CreateSettingsSectionCard("Appearance & Display", out generalRows);
-            AddSettingsThemeSelectorRow(generalRows);
+            AddSettingsThemeModeRow(generalRows);
+            AddSettingsColorThemeRow(generalRows);
             AddSettingsToggleRow(generalRows, "60fps Fluid Aura Ripple & Particle Stream", _animationsEnabled, val => { _animationsEnabled = val; _settings.AnimationsEnabled = val; _settings.Save(); });
             AddSettingsToggleRow(generalRows, "Discreet Self-Dismissing Progress Indicator", _autoFinishEnabled, val => { _autoFinishEnabled = val; _settings.AutoFinishEnabled = val; _settings.Save(); });
             stack.Children.Add(generalCard);
@@ -2716,28 +2939,36 @@ namespace BeamDropWindows
             pctPill.Child = _transferPercentBadge;
             rightRow.Children.Add(pctPill);
 
-            var cancelBtn = new Border
+                        var cancelBtn = new Border
             {
                 Width = 24,
                 Height = 24,
                 CornerRadius = new CornerRadius(12),
                 Background = new SolidColorBrush(Color.FromArgb(45, 248, 113, 113)),
                 Cursor = Cursors.Hand,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = "Cancel Transfer Immediately"
             };
-            cancelBtn.Child = new TextBlock
+            var cancelCanvas = new Canvas
             {
-                Text = "✕",
-                FontSize = 11,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(248, 113, 113)),
+                Width = 10,
+                Height = 10,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            var cancelPath = new SystemPath
+            {
+                Data = Geometry.Parse("M1.5,1.5 L8.5,8.5 M8.5,1.5 L1.5,8.5"),
+                Stroke = new SolidColorBrush(Color.FromRgb(248, 113, 113)),
+                StrokeThickness = 1.8,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round
+            };
+            cancelCanvas.Children.Add(cancelPath);
+            cancelBtn.Child = cancelCanvas;
             cancelBtn.MouseLeftButtonUp += (s, e) =>
             {
-                if (_activeTransferCts != null) _activeTransferCts.Cancel();
-                HideTransferOverlay();
+                CancelActiveTransfer(initiatedLocally: true);
             };
             rightRow.Children.Add(cancelBtn);
             topRow.Children.Add(rightRow);
@@ -3823,8 +4054,21 @@ namespace BeamDropWindows
 
         private async Task ExecuteSendFilesAsync(PeerNode peer, List<string> files)
         {
-            _activeTransferCts = new CancellationTokenSource();
-            var token = _activeTransferCts.Token;
+            if (_isTransferring)
+            {
+                MessageBox.Show(this, "A transfer is currently in progress. Please wait or cancel the current transfer first.", "Transfer Active", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            CancellationToken token;
+            lock (_transferLock)
+            {
+                _isTransferCancelled = false;
+                _activeTransferPeerIp = peer.Ip;
+                _activeTransferPeerName = peer.Name;
+                _activeTransferCts = new CancellationTokenSource();
+                token = _activeTransferCts.Token;
+            }
 
             long totalBytes = files.Sum(f => new FileInfo(f).Length);
             long sentBytes = 0;
@@ -3843,12 +4087,17 @@ namespace BeamDropWindows
 
             ShowTransferOverlay("Beaming to " + peer.Name, Path.GetFileName(files[0]), 0.0, 0.0);
 
+            bool transferSuccessful = false;
             try
             {
                 await Task.Run(async () =>
                 {
                     using (var client = new TcpClient())
                     {
+                        lock (_transferLock)
+                        {
+                            _activeOutgoingTcpClient = client;
+                        }
                         client.NoDelay = true;
                         client.SendBufferSize = 4 * 1024 * 1024;
                         client.ReceiveBufferSize = 4 * 1024 * 1024;
@@ -3863,6 +4112,11 @@ namespace BeamDropWindows
                             byte[] buffer = new byte[chunkSize];
                             for (int i = 0; i < files.Count; i++)
                             {
+                                if (token.IsCancellationRequested || _isTransferCancelled)
+                                {
+                                    throw new OperationCanceledException("Transfer cancelled");
+                                }
+
                                 var fi = new FileInfo(files[i]);
                                 var fileHeader = string.Format("FILE|{0}|{1}|application/octet-stream\n", fi.Name, fi.Length);
                                 var fhBytes = Encoding.UTF8.GetBytes(fileHeader);
@@ -3871,8 +4125,29 @@ namespace BeamDropWindows
                                 using (var fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, chunkSize, FileOptions.SequentialScan | FileOptions.Asynchronous))
                                 {
                                     int read;
+                                    int chunkCount = 0;
                                     while ((read = await fs.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
                                     {
+                                        if (token.IsCancellationRequested || _isTransferCancelled)
+                                        {
+                                            throw new OperationCanceledException("Transfer cancelled");
+                                        }
+
+                                        chunkCount++;
+                                        if (chunkCount % 16 == 0 && stream.DataAvailable)
+                                        {
+                                            byte[] checkBuf = new byte[128];
+                                            int cr = await stream.ReadAsync(checkBuf, 0, checkBuf.Length, token);
+                                            if (cr > 0)
+                                            {
+                                                string reply = Encoding.UTF8.GetString(checkBuf, 0, cr);
+                                                if (reply.Contains("CANCEL"))
+                                                {
+                                                    throw new OperationCanceledException("Cancelled by receiver");
+                                                }
+                                            }
+                                        }
+
                                         await stream.WriteAsync(buffer, 0, read, token);
                                         sentBytes += read;
                                         double elapsedSec = Math.Max(0.05, sw.Elapsed.TotalSeconds);
@@ -3891,6 +4166,35 @@ namespace BeamDropWindows
                     }
                 }, token);
 
+                if (!_isTransferCancelled && !token.IsCancellationRequested)
+                {
+                    transferSuccessful = true;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                BroadcastAuraPathSync(peer.Ip, "CANCELLED");
+                SendTcpCancelSignalToPeer(peer.Ip, TCP_PORT, _deviceName);
+            }
+            catch (Exception ex)
+            {
+                BroadcastAuraPathSync(peer.Ip, "CANCELLED");
+                if (!_isTransferCancelled && !(ex is OperationCanceledException))
+                {
+                    MessageBox.Show(this, "Transfer failed: " + ex.Message, "BeamDrop Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            finally
+            {
+                lock (_transferLock)
+                {
+                    _activeOutgoingTcpClient = null;
+                }
+                HideTransferOverlay();
+            }
+
+            if (transferSuccessful)
+            {
                 double finalSpeed = (totalBytes / (1024.0 * 1024.0)) / Math.Max(0.05, sw.Elapsed.TotalSeconds);
                 foreach (var f in files)
                 {
@@ -3911,25 +4215,12 @@ namespace BeamDropWindows
                 _auraPathState.IsActive = false;
                 BroadcastAuraPathSync(peer.Ip, "COMPLETED");
 
-                // Immediately clear staged files AND immediately self-dismiss the discreet progress indicator
                 ClearStagedSelection();
-                HideTransferOverlay();
-
                 string firstFile = files.FirstOrDefault();
                 string displayTitle = files.Count > 1 ? string.Format("{0} Files Sent!", files.Count) : "File Sent!";
                 string displayName = files.Count > 1 ? string.Format("{0} files", files.Count) : Path.GetFileName(firstFile);
                 ShowCompletionToast(displayTitle, string.Format("Delivered to {0}", peer.Name), displayName, totalBytes, firstFile);
                 PlayCompletionChime();
-            }
-            catch (Exception ex)
-            {
-                _auraPathState.IsActive = false;
-                BroadcastAuraPathSync(peer.Ip, "CANCELLED");
-                HideTransferOverlay();
-                if (!(ex is OperationCanceledException))
-                {
-                    MessageBox.Show(this, "Transfer failed: " + ex.Message, "BeamDrop Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
             }
         }
 
@@ -4208,8 +4499,14 @@ namespace BeamDropWindows
                         string firstLine = ReadUtf8Line(stream);
                         if (string.IsNullOrEmpty(firstLine)) return;
 
-                        // 1. Unified Handshake Verification Ping
-                        // Supports both BEAMDROP_PING|<deviceId>|<deviceName>|<type> AND BEAMDROP_PING|<deviceName>|<port>|<type>
+                        // 1. BEAMDROP_CANCEL out-of-band signal
+                        if (firstLine.StartsWith("BEAMDROP_CANCEL"))
+                        {
+                            CancelActiveTransfer(initiatedLocally: false);
+                            return;
+                        }
+
+                        // 2. Unified Handshake Verification Ping
                         if (firstLine.StartsWith("BEAMDROP_PING|"))
                         {
                             var parts = firstLine.Split('|');
@@ -4240,7 +4537,7 @@ namespace BeamDropWindows
                             return;
                         }
 
-                        // 2. Incoming File Transfer Stream (BEAMDROP_V1|senderName|fileCount|totalBytes)
+                        // 3. Incoming File Transfer Stream (BEAMDROP_V1|senderName|fileCount|totalBytes)
                         if (firstLine.StartsWith("BEAMDROP_V1|"))
                         {
                             var parts = firstLine.Split('|');
@@ -4249,6 +4546,18 @@ namespace BeamDropWindows
                             long totalBytes = parts.Length > 3 ? long.Parse(parts[3]) : 0L;
                             string flowDirection = parts.Length > 4 ? parts[4].Trim().ToUpperInvariant() : "TOP";
                             _auraPathState.FlowDirection = flowDirection;
+
+                            CancellationToken sessionToken;
+                            lock (_transferLock)
+                            {
+                                _isTransferCancelled = false;
+                                _activeIncomingTcpClient = client;
+                                _activeTransferPeerIp = senderIp;
+                                _activeTransferPeerName = senderName;
+                                _currentReceivingTempFiles.Clear();
+                                _activeTransferCts = new CancellationTokenSource();
+                                sessionToken = _activeTransferCts.Token;
+                            }
 
                             RegisterDiscoveredPeer("peer_" + senderIp, senderName, senderIp, TCP_PORT, "PHONE");
                             ShowTransferOverlay("Receiving from " + senderName, "Incoming file...", 0.0, 0.0);
@@ -4260,72 +4569,144 @@ namespace BeamDropWindows
                             var sw = Stopwatch.StartNew();
                             int chunkSize = (_settings != null && _settings.TurboSpeedMode) ? (1024 * 1024) : 65536;
                             byte[] buffer = new byte[chunkSize];
-                            string lastDestPath = null;
-                            string lastFileName = null;
 
-                            for (int i = 0; i < fileCount; i++)
+                            var completedFiles = new List<Tuple<string, string, long>>();
+                            bool transferAborted = false;
+
+                            try
                             {
-                                string fileHdr = ReadUtf8Line(stream);
-                                if (string.IsNullOrEmpty(fileHdr) || !fileHdr.StartsWith("FILE|")) break;
-                                var fParts = fileHdr.Split('|');
-                                string fileName = SanitizeFileName(fParts.Length > 1 ? fParts[1] : ("Received_" + i));
-                                long fileSize = fParts.Length > 2 ? long.Parse(fParts[2]) : 0L;
-
-                                string destPath = GetUniqueFilePath(_downloadDir, fileName);
-                                lastDestPath = destPath;
-                                lastFileName = fileName;
-                                long remaining = fileSize;
-                                using (var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, chunkSize, FileOptions.SequentialScan | FileOptions.Asynchronous))
+                                for (int i = 0; i < fileCount; i++)
                                 {
-                                    while (remaining > 0)
+                                    if (sessionToken.IsCancellationRequested || _isTransferCancelled)
                                     {
-                                        int toRead = (int)Math.Min(buffer.Length, remaining);
-                                        int read = await stream.ReadAsync(buffer, 0, toRead, token);
-                                        if (read <= 0) break;
-                                        await fs.WriteAsync(buffer, 0, read, token);
-                                        remaining -= read;
-                                        totalReceived += read;
+                                        transferAborted = true;
+                                        break;
+                                    }
 
-                                        double elapsed = Math.Max(0.05, sw.Elapsed.TotalSeconds);
-                                        double mbps = (totalReceived / (1024.0 * 1024.0)) / elapsed;
-                                        double prog = totalBytes > 0 ? (double)totalReceived / totalBytes : 1.0;
-                                        UpdateTransferOverlay(fileName, prog, mbps);
+                                    string fileHdr = ReadUtf8Line(stream);
+                                    if (string.IsNullOrEmpty(fileHdr) || !fileHdr.StartsWith("FILE|"))
+                                    {
+                                        transferAborted = true;
+                                        break;
+                                    }
+
+                                    var fParts = fileHdr.Split('|');
+                                    string fileName = SanitizeFileName(fParts.Length > 1 ? fParts[1] : ("Received_" + i));
+                                    long fileSize = fParts.Length > 2 ? long.Parse(fParts[2]) : 0L;
+
+                                    string destPath = GetUniqueFilePath(_downloadDir, fileName);
+                                    lock (_transferLock)
+                                    {
+                                        _currentReceivingTempFiles.Add(destPath);
+                                    }
+
+                                    long remaining = fileSize;
+                                    using (var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, chunkSize, FileOptions.SequentialScan | FileOptions.Asynchronous))
+                                    {
+                                        while (remaining > 0)
+                                        {
+                                            if (sessionToken.IsCancellationRequested || _isTransferCancelled)
+                                            {
+                                                transferAborted = true;
+                                                break;
+                                            }
+
+                                            int toRead = (int)Math.Min(buffer.Length, remaining);
+                                            int read = await stream.ReadAsync(buffer, 0, toRead, sessionToken);
+                                            if (read <= 0)
+                                            {
+                                                transferAborted = true;
+                                                break;
+                                            }
+                                            await fs.WriteAsync(buffer, 0, read, sessionToken);
+                                            remaining -= read;
+                                            totalReceived += read;
+
+                                            double elapsed = Math.Max(0.05, sw.Elapsed.TotalSeconds);
+                                            double mbps = (totalReceived / (1024.0 * 1024.0)) / elapsed;
+                                            double prog = totalBytes > 0 ? (double)totalReceived / totalBytes : 1.0;
+                                            UpdateTransferOverlay(fileName, prog, mbps);
+                                        }
+                                    }
+
+                                    if (transferAborted || remaining > 0)
+                                    {
+                                        transferAborted = true;
+                                        try { if (File.Exists(destPath)) File.Delete(destPath); } catch {}
+                                        lock (_transferLock) { _currentReceivingTempFiles.Remove(destPath); }
+                                        break;
+                                    }
+                                    else
+                                    {
+                                        completedFiles.Add(Tuple.Create(fileName, destPath, fileSize));
                                     }
                                 }
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                transferAborted = true;
+                            }
+                            catch (Exception)
+                            {
+                                transferAborted = true;
+                            }
 
-                                double speedMbps = (totalReceived / (1024.0 * 1024.0)) / Math.Max(0.05, sw.Elapsed.TotalSeconds);
-                                _history.Insert(0, new TransferLogEntry
+                            if (transferAborted || _isTransferCancelled)
+                            {
+                                CleanupPartialReceivingFiles();
+                                HideTransferOverlay();
+                                try
                                 {
-                                    FileName = fileName,
-                                    Direction = "RECEIVED",
-                                    PeerName = senderName,
-                                    SizeBytes = fileSize,
-                                    SpeedMbps = speedMbps,
-                                    Status = "COMPLETED",
-                                    SavedPath = destPath,
-                                    Timestamp = DateTime.Now.ToString("HH:mm:ss")
-                                });
-                                ReceivingHistoryManager.AddRecord(fileName, destPath, fileSize, senderName, senderIp, DateTime.Now);
-                                Dispatcher.Invoke(() => { if (_isHistoryOpen) RefreshHistoryListUi(); });
+                                    byte[] cancelAck = Encoding.UTF8.GetBytes("CANCEL\n");
+                                    await stream.WriteAsync(cancelAck, 0, cancelAck.Length);
+                                    await stream.FlushAsync();
+                                }
+                                catch {}
+                                return;
                             }
 
                             byte[] ack = Encoding.UTF8.GetBytes("OK\n");
-                            await stream.WriteAsync(ack, 0, ack.Length, token);
-                            await stream.FlushAsync(token);
+                            await stream.WriteAsync(ack, 0, ack.Length, sessionToken);
+                            await stream.FlushAsync(sessionToken);
 
-                            // Immediately self-dismiss the discreet progress indicator upon completion
                             HideTransferOverlay();
 
+                            foreach (var cf in completedFiles)
+                            {
+                                double speedMbps = (totalReceived / (1024.0 * 1024.0)) / Math.Max(0.05, sw.Elapsed.TotalSeconds);
+                                _history.Insert(0, new TransferLogEntry
+                                {
+                                    FileName = cf.Item1,
+                                    Direction = "RECEIVED",
+                                    PeerName = senderName,
+                                    SizeBytes = cf.Item3,
+                                    SpeedMbps = speedMbps,
+                                    Status = "COMPLETED",
+                                    SavedPath = cf.Item2,
+                                    Timestamp = DateTime.Now.ToString("HH:mm:ss")
+                                });
+                                ReceivingHistoryManager.AddRecord(cf.Item1, cf.Item2, cf.Item3, senderName, senderIp, DateTime.Now);
+                            }
+                            lock (_transferLock) { _currentReceivingTempFiles.Clear(); }
+
+                            Dispatcher.Invoke(() => { if (_isHistoryOpen) RefreshHistoryListUi(); });
+
                             string displayTitle = fileCount > 1 ? string.Format("{0} Files Received!", fileCount) : "File Received!";
-                            string displayName = fileCount > 1 ? string.Format("{0} files ({1})", fileCount, FormatFileSize(totalBytes)) : lastFileName;
-                            ShowCompletionToast(displayTitle, string.Format("Received from {0}", senderName), displayName, totalBytes, lastDestPath);
+                            var lastFileTuple = completedFiles.Count > 0 ? completedFiles[completedFiles.Count - 1] : null;
+                            string displayName = fileCount > 1 ? string.Format("{0} files ({1})", fileCount, FormatFileSize(totalBytes)) : (lastFileTuple != null ? lastFileTuple.Item1 : "file");
+                            string lastPath = lastFileTuple != null ? lastFileTuple.Item2 : null;
+                            ShowCompletionToast(displayTitle, string.Format("Received from {0}", senderName), displayName, totalBytes, lastPath);
                             PlayCompletionChime();
                         }
                     }
                 }
-                catch
+                catch { }
+                finally
                 {
-                    HideTransferOverlay();
+                    lock (_transferLock)
+                    {
+                        _activeIncomingTcpClient = null;
+                    }
                 }
             }
         }
@@ -4409,9 +4790,13 @@ namespace BeamDropWindows
                                     string stateToken = parts[7];
                                     string flowDirection = parts.Length >= 9 ? parts[8].Trim().ToUpperInvariant() : "TOP";
 
-                                    if (stateToken == "COMPLETED" || stateToken == "CANCELLED" || prog >= 1.0)
+                                    if (stateToken == "COMPLETED" || prog >= 1.0)
                                     {
                                         HideTransferOverlay();
+                                    }
+                                    else if (stateToken == "CANCELLED")
+                                    {
+                                        CancelActiveTransfer(initiatedLocally: false);
                                     }
                                     else
                                     {
@@ -4931,67 +5316,132 @@ namespace BeamDropWindows
             return card;
         }
 
-        private void AddSettingsThemeSelectorRow(StackPanel parent)
+                private void AddSettingsThemeModeRow(StackPanel parent)
         {
-            var dock = new DockPanel { Margin = new Thickness(0, 6, 0, 6) };
+            var dock = new DockPanel { Margin = new Thickness(0, 4, 0, 10) };
             dock.Children.Add(new TextBlock
             {
-                Text = "Theme",
+                Text = "Theme Mode",
                 FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(_currentTextPrimary),
                 VerticalAlignment = VerticalAlignment.Center
             });
 
             var segStack = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            string[] modes = { "System", "iOS 26 Clear", "Dark", "Midnight" };
+            string currentMode = _settings.ThemeMode ?? "Dark";
 
-            var darkPill = new Border
+            foreach (var mode in modes)
             {
-                CornerRadius = new CornerRadius(8),
-                Background = new SolidColorBrush(_isDarkMode ? _currentMintAccent : Color.FromArgb(35, 128, 128, 128)),
-                BorderBrush = new SolidColorBrush(_currentCardBorder),
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(12, 6, 12, 6),
-                Margin = new Thickness(0, 0, 8, 0),
-                Cursor = Cursors.Hand
-            };
-            darkPill.Child = new TextBlock
-            {
-                Text = "🌙 Dark Theme",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(_isDarkMode ? Color.FromRgb(15, 23, 42) : _currentTextPrimary)
-            };
-            darkPill.MouseLeftButtonUp += (s, e) =>
-            {
-                if (!_isDarkMode) ApplyTheme(true);
-            };
+                string m = mode;
+                bool isSel = string.Equals(m, currentMode, StringComparison.OrdinalIgnoreCase);
+                var pill = new Border
+                {
+                    CornerRadius = new CornerRadius(8),
+                    Background = new SolidColorBrush(isSel ? Color.FromArgb(60, _currentMintAccent.R, _currentMintAccent.G, _currentMintAccent.B) : Color.FromArgb(25, 128, 128, 128)),
+                    BorderBrush = new SolidColorBrush(isSel ? _currentMintAccent : _currentCardBorder),
+                    BorderThickness = new Thickness(isSel ? 1.5 : 1),
+                    Padding = new Thickness(10, 5, 10, 5),
+                    Margin = new Thickness(0, 0, 6, 0),
+                    Cursor = Cursors.Hand
+                };
+                pill.Child = new TextBlock
+                {
+                    Text = m,
+                    FontSize = 11.5,
+                    FontWeight = isSel ? FontWeights.Bold : FontWeights.Normal,
+                    Foreground = new SolidColorBrush(isSel ? _currentMintAccent : _currentTextSecondary)
+                };
+                pill.MouseLeftButtonUp += (s, e) =>
+                {
+                    ApplyThemePalette(m, _settings.ColorTheme ?? "LocalSend");
+                };
+                segStack.Children.Add(pill);
+            }
 
-            var lightPill = new Border
-            {
-                CornerRadius = new CornerRadius(8),
-                Background = new SolidColorBrush(!_isDarkMode ? _currentMintAccent : Color.FromArgb(35, 128, 128, 128)),
-                BorderBrush = new SolidColorBrush(_currentCardBorder),
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(12, 6, 12, 6),
-                Cursor = Cursors.Hand
-            };
-            lightPill.Child = new TextBlock
-            {
-                Text = "☀️ Light Theme",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(!_isDarkMode ? Colors.White : _currentTextPrimary)
-            };
-            lightPill.MouseLeftButtonUp += (s, e) =>
-            {
-                if (_isDarkMode) ApplyTheme(false);
-            };
-
-            segStack.Children.Add(darkPill);
-            segStack.Children.Add(lightPill);
             DockPanel.SetDock(segStack, Dock.Right);
             dock.Children.Add(segStack);
             parent.Children.Add(dock);
+        }
+
+        private void AddSettingsColorThemeRow(StackPanel parent)
+        {
+            var row = new StackPanel { Margin = new Thickness(0, 4, 0, 12) };
+            row.Children.Add(new TextBlock
+            {
+                Text = "Color Accent & Atmosphere",
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(_currentTextPrimary),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var wrap = new WrapPanel { Orientation = Orientation.Horizontal };
+            var colorList = new Tuple<string, Color>[]
+            {
+                Tuple.Create("LocalSend", Color.FromRgb(94, 234, 212)),
+                Tuple.Create("iOS 26 Clear", Color.FromRgb(125, 211, 252)),
+                Tuple.Create("Sapphire Blue", Color.FromRgb(96, 165, 250)),
+                Tuple.Create("Royal Violet", Color.FromRgb(192, 132, 252)),
+                Tuple.Create("Emerald Glass", Color.FromRgb(52, 211, 153)),
+                Tuple.Create("Sunset Rose", Color.FromRgb(251, 113, 133)),
+                Tuple.Create("Cyber Gold", Color.FromRgb(251, 191, 36)),
+                Tuple.Create("Crimson Ruby", Color.FromRgb(248, 113, 113)),
+                Tuple.Create("Arctic Cyan", Color.FromRgb(34, 211, 238))
+            };
+
+            string currentColor = _settings.ColorTheme ?? "LocalSend";
+
+            foreach (var item in colorList)
+            {
+                string cName = item.Item1;
+                Color cDot = item.Item2;
+                bool isSel = string.Equals(cName, currentColor, StringComparison.OrdinalIgnoreCase);
+
+                var pill = new Border
+                {
+                    CornerRadius = new CornerRadius(14),
+                    Background = new SolidColorBrush(isSel ? Color.FromArgb(50, cDot.R, cDot.G, cDot.B) : Color.FromArgb(25, 128, 128, 128)),
+                    BorderBrush = new SolidColorBrush(isSel ? cDot : Color.FromArgb(60, cDot.R, cDot.G, cDot.B)),
+                    BorderThickness = new Thickness(isSel ? 1.5 : 1),
+                    Padding = new Thickness(10, 4, 10, 4),
+                    Margin = new Thickness(0, 0, 8, 8),
+                    Cursor = Cursors.Hand
+                };
+
+                var pillStack = new StackPanel { Orientation = Orientation.Horizontal };
+                var dot = new Ellipse
+                {
+                    Width = 10,
+                    Height = 10,
+                    Fill = new SolidColorBrush(cDot),
+                    Margin = new Thickness(0, 0, 6, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                pillStack.Children.Add(dot);
+
+                var label = new TextBlock
+                {
+                    Text = cName,
+                    FontSize = 11,
+                    FontWeight = isSel ? FontWeights.Bold : FontWeights.Normal,
+                    Foreground = new SolidColorBrush(isSel ? cDot : _currentTextSecondary),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                pillStack.Children.Add(label);
+
+                pill.Child = pillStack;
+                pill.MouseLeftButtonUp += (s, e) =>
+                {
+                    ApplyThemePalette(_settings.ThemeMode ?? "Dark", cName);
+                };
+
+                wrap.Children.Add(pill);
+            }
+
+            row.Children.Add(wrap);
+            parent.Children.Add(row);
         }
 
         private void AddSettingsFolderRow(StackPanel parent, string label, string path)
