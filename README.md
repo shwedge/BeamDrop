@@ -2,7 +2,11 @@
 
 > **Apple-Style Fluid Ecosystem for Android & Windows 10/11**  
 > **Official Publisher:** Sajjad Hossain (`sajjadtheacid@gmail.com`)  
-> **Product Version:** 2.4.0.0
+> **Product Version:** 2.5.0.0
+
+[![Android APK](https://img.shields.io/badge/Download-Android%20APK%20(v2.5.0)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/shwedge/BeamDrop/raw/main/public/BeamDrop.apk)
+[![Windows EXE](https://img.shields.io/badge/Download-Windows%20Executable-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/shwedge/BeamDrop/raw/main/windows/BeamDrop.exe)
+[![Windows Installer Zip](https://img.shields.io/badge/Download-Windows%20Installer%20Zip-00F5D4?style=for-the-badge&logo=windows&logoColor=black)](https://github.com/shwedge/BeamDrop/raw/main/public/BeamDrop-Windows-Installer.zip)
 
 ---
 
