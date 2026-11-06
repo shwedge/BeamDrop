@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -2541,7 +2541,7 @@ namespace BeamDropWindows
 
             grid.Children.Add(centerStack);
 
-            // Bottom Quick Save segmented control (Off | Favorites | On)
+            // Bottom Auto-Save Status Indicator
             var bottomStack = new StackPanel
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -2549,64 +2549,26 @@ namespace BeamDropWindows
                 Margin = new Thickness(0, 0, 0, 38)
             };
 
-            bottomStack.Children.Add(new TextBlock
+            var autoSaveBadge = new Border
             {
-                Text = "Quick Save",
-                FontSize = 13,
-                Foreground = new SolidColorBrush(TextPrimary),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 10)
-            });
-
-            var segOuter = new Border
-            {
-                CornerRadius = new CornerRadius(18),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(75, 105, 96)),
+                CornerRadius = new CornerRadius(14),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(80, 58, 228, 204)),
                 BorderThickness = new Thickness(1),
-                Background = new SolidColorBrush(Color.FromRgb(15, 29, 25))
+                Background = new SolidColorBrush(Color.FromArgb(40, 20, 40, 45)),
+                Padding = new Thickness(16, 8, 16, 8)
             };
 
-            var segGrid = new Grid { Width = 240, Height = 34 };
-            segGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            segGrid.ColumnDefinitions.Add(new ColumnDefinition());
-            segGrid.ColumnDefinitions.Add(new ColumnDefinition());
-
-            string[] modes = { "Off", "Favorites", "On" };
-            for (int i = 0; i < 3; i++)
+            autoSaveBadge.Child = new TextBlock
             {
-                int idx = i;
-                var segBtn = new Border
-                {
-                    CornerRadius = new CornerRadius(17),
-                    Cursor = Cursors.Hand,
-                    Background = idx == _quickSaveMode ? new SolidColorBrush(Color.FromRgb(42, 75, 67)) : Brushes.Transparent
-                };
-                segBtn.Child = new TextBlock
-                {
-                    Text = modes[i],
-                    FontSize = 12,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = new SolidColorBrush(TextPrimary),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                segBtn.MouseLeftButtonUp += (s, e) =>
-                {
-                    _quickSaveMode = idx;
-                    for (int k = 0; k < 3; k++)
-                    {
-                        _quickSaveButtons[k].Background = k == _quickSaveMode
-                            ? new SolidColorBrush(Color.FromRgb(42, 75, 67))
-                            : Brushes.Transparent;
-                    }
-                };
-                _quickSaveButtons[i] = segBtn;
-                Grid.SetColumn(segBtn, i);
-                segGrid.Children.Add(segBtn);
-            }
+                Text = "✓ Auto-Save Active • Files save directly to Settings folder",
+                FontSize = 12,
+                FontWeight = FontWeights.Medium,
+                Foreground = new SolidColorBrush(MintAccent),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
 
-            segOuter.Child = segGrid;
-            bottomStack.Children.Add(segOuter);
+            bottomStack.Children.Add(autoSaveBadge);
             grid.Children.Add(bottomStack);
 
             return grid;
@@ -3212,6 +3174,108 @@ namespace BeamDropWindows
 
             card.Child = stack;
             return card;
+        }
+
+        private void ShowReceivedPlainTextWindow(string senderName, string textContent)
+        {
+            try
+            {
+                try { Clipboard.SetText(textContent); } catch { }
+
+                var win = new Window
+                {
+                    Title = "Plain Text Received - BeamDrop",
+                    Width = 460,
+                    Height = 330,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = this,
+                    Background = new SolidColorBrush(BgDark),
+                    Foreground = new SolidColorBrush(TextPrimary),
+                    ResizeMode = ResizeMode.NoResize,
+                    BorderBrush = new SolidColorBrush(MintAccent),
+                    BorderThickness = new Thickness(1.5)
+                };
+
+                var sp = new StackPanel { Margin = new Thickness(20) };
+
+                var headerText = new TextBlock
+                {
+                    Text = "Plain Text Received",
+                    FontSize = 16,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(MintAccent)
+                };
+                var subText = new TextBlock
+                {
+                    Text = string.Format("From {0} • Copied to clipboard", senderName),
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(Color.FromRgb(140, 160, 180)),
+                    Margin = new Thickness(0, 4, 0, 12)
+                };
+
+                sp.Children.Add(headerText);
+                sp.Children.Add(subText);
+
+                var box = new TextBox
+                {
+                    Text = textContent,
+                    Height = 130,
+                    IsReadOnly = true,
+                    AcceptsReturn = true,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    Background = new SolidColorBrush(Color.FromRgb(15, 23, 42)),
+                    Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(100, 58, 228, 204)),
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(10),
+                    FontSize = 13
+                };
+                sp.Children.Add(box);
+
+                var btnGrid = new Grid { Margin = new Thickness(0, 16, 0, 0) };
+                btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+                btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+
+                var copyBtn = new Button
+                {
+                    Content = "Copy Text",
+                    Height = 36,
+                    Background = new SolidColorBrush(MintAccent),
+                    Foreground = new SolidColorBrush(BgDark),
+                    FontWeight = FontWeights.Bold,
+                    Cursor = Cursors.Hand
+                };
+                copyBtn.Click += (s, e) =>
+                {
+                    try
+                    {
+                        Clipboard.SetText(textContent);
+                        copyBtn.Content = "Copied to Clipboard!";
+                    }
+                    catch { }
+                };
+                Grid.SetColumn(copyBtn, 0);
+                btnGrid.Children.Add(copyBtn);
+
+                var closeBtn = new Button
+                {
+                    Content = "Close",
+                    Height = 36,
+                    Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                    Foreground = new SolidColorBrush(TextPrimary),
+                    Cursor = Cursors.Hand
+                };
+                closeBtn.Click += (s, e) => win.Close();
+                Grid.SetColumn(closeBtn, 2);
+                btnGrid.Children.Add(closeBtn);
+
+                sp.Children.Add(btnGrid);
+                win.Content = sp;
+                win.ShowDialog();
+            }
+            catch { }
         }
 
         private void ShowCompletionToast(string title, string peerName, string fileName, long sizeBytes, string filePath)
@@ -3832,9 +3896,13 @@ namespace BeamDropWindows
 
                 foreach (var path in _stagedFiles.Take(5))
                 {
+                    string fname = Path.GetFileName(path);
+                    string displayLabel = fname.StartsWith("__BEAMDROP_PLAIN_TEXT__")
+                        ? "• Plain Text Snippet (Receiver Copy Pop-up)"
+                        : "• " + fname;
                     var itemRow = new TextBlock
                     {
-                        Text = "• " + Path.GetFileName(path),
+                        Text = displayLabel,
                         FontSize = 12,
                         Foreground = new SolidColorBrush(TextPrimary),
                         Margin = new Thickness(0, 2, 0, 2)
@@ -4118,7 +4186,17 @@ namespace BeamDropWindows
                                 }
 
                                 var fi = new FileInfo(files[i]);
-                                var fileHeader = string.Format("FILE|{0}|{1}|application/octet-stream\n", fi.Name, fi.Length);
+                                bool isPlainText = fi.Name.StartsWith("__BEAMDROP_PLAIN_TEXT__");
+                                string fileHeader;
+                                if (isPlainText && fi.Length <= 500)
+                                {
+                                    fileHeader = string.Format("FILE|__BEAMDROP_PLAIN_TEXT__|{0}|text/plain;beamdrop-raw\n", fi.Length);
+                                }
+                                else
+                                {
+                                    string outName = isPlainText ? string.Format("Pasted_Text_{0}.txt", DateTime.Now.ToString("yyyyMMdd_HHmmss")) : fi.Name;
+                                    fileHeader = string.Format("FILE|{0}|{1}|application/octet-stream\n", outName, fi.Length);
+                                }
                                 var fhBytes = Encoding.UTF8.GetBytes(fileHeader);
                                 await stream.WriteAsync(fhBytes, 0, fhBytes.Length, token);
 
@@ -4335,11 +4413,21 @@ namespace BeamDropWindows
             };
             sendBtn.Click += (s, e) =>
             {
-                if (!string.IsNullOrWhiteSpace(box.Text))
+                var trimmed = (box.Text ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(trimmed))
                 {
-                    var tmp = Path.Combine(Path.GetTempPath(), "BeamText_" + (DateTime.Now.Ticks % 100000) + ".txt");
-                    File.WriteAllText(tmp, box.Text);
-                    _stagedFiles.Add(tmp);
+                    if (trimmed.Length <= 500)
+                    {
+                        var tmp = Path.Combine(Path.GetTempPath(), "__BEAMDROP_PLAIN_TEXT__" + (DateTime.Now.Ticks % 100000) + ".txt");
+                        File.WriteAllText(tmp, trimmed, Encoding.UTF8);
+                        _stagedFiles.Add(tmp);
+                    }
+                    else
+                    {
+                        var tmp = Path.Combine(Path.GetTempPath(), "BeamText_" + (DateTime.Now.Ticks % 100000) + ".txt");
+                        File.WriteAllText(tmp, trimmed, Encoding.UTF8);
+                        _stagedFiles.Add(tmp);
+                    }
                     RefreshStagedSelectionUi();
                 }
                 prompt.Close();
@@ -4361,12 +4449,21 @@ namespace BeamDropWindows
             }
             else if (Clipboard.ContainsText())
             {
-                var txt = Clipboard.GetText();
+                var txt = (Clipboard.GetText() ?? "").Trim();
                 if (!string.IsNullOrWhiteSpace(txt))
                 {
-                    var tmp = Path.Combine(Path.GetTempPath(), "Clipboard_" + (DateTime.Now.Ticks % 100000) + ".txt");
-                    File.WriteAllText(tmp, txt);
-                    _stagedFiles.Add(tmp);
+                    if (txt.Length <= 500)
+                    {
+                        var tmp = Path.Combine(Path.GetTempPath(), "__BEAMDROP_PLAIN_TEXT__" + (DateTime.Now.Ticks % 100000) + ".txt");
+                        File.WriteAllText(tmp, txt, Encoding.UTF8);
+                        _stagedFiles.Add(tmp);
+                    }
+                    else
+                    {
+                        var tmp = Path.Combine(Path.GetTempPath(), "Clipboard_" + (DateTime.Now.Ticks % 100000) + ".txt");
+                        File.WriteAllText(tmp, txt, Encoding.UTF8);
+                        _stagedFiles.Add(tmp);
+                    }
                     RefreshStagedSelectionUi();
                 }
             }
@@ -4584,7 +4681,7 @@ namespace BeamDropWindows
                                     }
 
                                     string fileHdr = ReadUtf8Line(stream);
-                                    if (string.IsNullOrEmpty(fileHdr) || !fileHdr.StartsWith("FILE|"))
+                                    if (string.IsNullOrEmpty(fileHdr) || (!fileHdr.StartsWith("FILE|") && !fileHdr.StartsWith("TEXT|")))
                                     {
                                         transferAborted = true;
                                         break;
@@ -4593,6 +4690,66 @@ namespace BeamDropWindows
                                     var fParts = fileHdr.Split('|');
                                     string fileName = SanitizeFileName(fParts.Length > 1 ? fParts[1] : ("Received_" + i));
                                     long fileSize = fParts.Length > 2 ? long.Parse(fParts[2]) : 0L;
+                                    string fileMime = fParts.Length > 3 ? fParts[3] : "";
+
+                                    bool isPlainText = fileName == "__BEAMDROP_PLAIN_TEXT__" ||
+                                        fileMime.IndexOf("beamdrop-raw", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        fParts[0] == "TEXT";
+
+                                    if (isPlainText)
+                                    {
+                                        byte[] textBytes = new byte[fileSize];
+                                        int textRead = 0;
+                                        while (textRead < fileSize)
+                                        {
+                                            if (sessionToken.IsCancellationRequested || _isTransferCancelled)
+                                            {
+                                                transferAborted = true;
+                                                break;
+                                            }
+                                            int toRead = (int)Math.Min(buffer.Length, fileSize - textRead);
+                                            int read = await stream.ReadAsync(textBytes, textRead, toRead, sessionToken);
+                                            if (read <= 0) { transferAborted = true; break; }
+                                            textRead += read;
+                                            totalReceived += read;
+                                        }
+
+                                        if (!transferAborted)
+                                        {
+                                            string textContent = Encoding.UTF8.GetString(textBytes);
+                                            if (textContent.Length <= 500)
+                                            {
+                                                Dispatcher.Invoke(() =>
+                                                {
+                                                    ShowReceivedPlainTextWindow(senderName, textContent);
+                                                });
+                                                string snippetPreview = textContent.Length > 35
+                                                    ? textContent.Substring(0, 35).Replace("\r", " ").Replace("\n", " ") + "..."
+                                                    : textContent.Replace("\r", " ").Replace("\n", " ");
+                                                _history.Insert(0, new TransferLogEntry
+                                                {
+                                                    FileName = "Plain Text: " + snippetPreview,
+                                                    Direction = "RECEIVED",
+                                                    PeerName = senderName,
+                                                    SizeBytes = textBytes.Length,
+                                                    SpeedMbps = 0,
+                                                    Status = "COPIED",
+                                                    SavedPath = "",
+                                                    Timestamp = DateTime.Now.ToString("HH:mm:ss")
+                                                });
+                                                ReceivingHistoryManager.AddRecord("Plain Text", "", textBytes.Length, senderName, senderIp, DateTime.Now);
+                                                PlayCompletionChime();
+                                            }
+                                            else
+                                            {
+                                                string txtName = string.Format("Pasted_Text_{0}.txt", DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+                                                string txtDestPath = GetUniqueFilePath(_downloadDir, txtName);
+                                                File.WriteAllBytes(txtDestPath, textBytes);
+                                                completedFiles.Add(Tuple.Create(txtName, txtDestPath, (long)textBytes.Length));
+                                            }
+                                        }
+                                        continue;
+                                    }
 
                                     string destPath = GetUniqueFilePath(_downloadDir, fileName);
                                     lock (_transferLock)
@@ -4691,12 +4848,15 @@ namespace BeamDropWindows
 
                             Dispatcher.Invoke(() => { if (_isHistoryOpen) RefreshHistoryListUi(); });
 
-                            string displayTitle = fileCount > 1 ? string.Format("{0} Files Received!", fileCount) : "File Received!";
-                            var lastFileTuple = completedFiles.Count > 0 ? completedFiles[completedFiles.Count - 1] : null;
-                            string displayName = fileCount > 1 ? string.Format("{0} files ({1})", fileCount, FormatFileSize(totalBytes)) : (lastFileTuple != null ? lastFileTuple.Item1 : "file");
-                            string lastPath = lastFileTuple != null ? lastFileTuple.Item2 : null;
-                            ShowCompletionToast(displayTitle, string.Format("Received from {0}", senderName), displayName, totalBytes, lastPath);
-                            PlayCompletionChime();
+                            if (completedFiles.Count > 0)
+                            {
+                                string displayTitle = completedFiles.Count > 1 ? string.Format("{0} Files Received!", completedFiles.Count) : "File Received!";
+                                var lastFileTuple = completedFiles[completedFiles.Count - 1];
+                                string displayName = completedFiles.Count > 1 ? string.Format("{0} files ({1})", completedFiles.Count, FormatFileSize(totalBytes)) : lastFileTuple.Item1;
+                                string lastPath = lastFileTuple.Item2;
+                                ShowCompletionToast(displayTitle, string.Format("Received from {0}", senderName), displayName, totalBytes, lastPath);
+                                PlayCompletionChime();
+                            }
                         }
                     }
                 }

@@ -54,6 +54,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -120,9 +121,6 @@ fun BeamDropScreen(
     val lastReceivedFile by viewModel.lastReceivedFile.collectAsState()
     val receivedTextPopup by viewModel.receivedTextPopup.collectAsState()
 
-    // Pending file path or URI for "Save File As..." (CreateDocument)
-    var pendingSaveAsSourcePath by remember { mutableStateOf<String?>(null) }
-
     // 1. Choose Default Save Folder Launcher (OpenDocumentTree) for received files
     val saveFolderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -150,25 +148,6 @@ fun BeamDropScreen(
                 }
             }
             Toast.makeText(context, "Save location set to: $folderLabel", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // 2. Save Individual Received File As... Launcher (CreateDocument)
-    val saveFileAsLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("*/*")
-    ) { targetUri: Uri? ->
-        val srcPath = pendingSaveAsSourcePath
-        if (targetUri != null && !srcPath.isNullOrBlank()) {
-            coroutineScope.launch {
-                val ok = withContext(Dispatchers.IO) {
-                    RealTransferEngine.copyFileToUserSelectedUri(context, srcPath, targetUri)
-                }
-                if (ok) {
-                    Toast.makeText(context, "File saved to selected storage location!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "Could not save file to chosen location", Toast.LENGTH_SHORT).show()
-                }
-            }
         }
     }
 
@@ -418,20 +397,6 @@ fun BeamDropScreen(
                         viewModel = viewModel,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    // Received File Save / Choose Folder Banner when a file arrives
-                    lastReceivedFile?.let { received ->
-                        ReceivedFileStorageBanner(
-                            receivedFile = received,
-                            onSaveAsClick = {
-                                pendingSaveAsSourcePath = received.absolutePath
-                                saveFileAsLauncher.launch(received.name)
-                            },
-                            onChangeFolderClick = {
-                                saveFolderPickerLauncher.launch(null)
-                            },
-                            onDismiss = { viewModel.dismissLastReceivedFile() }
-                        )
-                    }
                 }
             },
             bottomBar = {
@@ -609,15 +574,7 @@ fun BeamDropScreen(
                             HistoryTabHost(
                                 viewModel = viewModel,
                                 onOpenFile = { record -> openTransferRecord(record) },
-                                onShareFile = { record -> shareTransferRecord(record) },
-                                onSaveFileAs = { record ->
-                                    val fallbackFile = File(
-                                        context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir,
-                                        "BeamDrop/${record.fileName}"
-                                    )
-                                    pendingSaveAsSourcePath = record.localUri ?: fallbackFile.absolutePath
-                                    saveFileAsLauncher.launch(record.fileName)
-                                }
+                                onShareFile = { record -> shareTransferRecord(record) }
                             )
                         }
                         BeamTab.SETTINGS -> {
@@ -654,6 +611,9 @@ fun BeamDropScreen(
 
         // Pop-up Receiver Dialog when Plain Text is received from Sender (no .txt file created)
         receivedTextPopup?.let { textPayload ->
+            LaunchedEffect(textPayload) {
+                clipboardManager.setText(AnnotatedString(textPayload.textContent))
+            }
             ReceivedPlainTextPopupDialog(
                 payload = textPayload,
                 onCopyText = {
@@ -773,131 +733,6 @@ private fun ReceivedPlainTextPopupDialog(
 }
 
 @Composable
-private fun ReceivedFileStorageBanner(
-    receivedFile: File,
-    onSaveAsClick: () -> Unit,
-    onChangeFolderClick: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .glassLiquidCard(
-                cornerRadius = 16.dp,
-                tintColor = NeonTeal,
-                secondaryTint = ElectricCyan
-            )
-            .padding(horizontal = 12.dp, vertical = 9.dp)
-            .testTag("received_file_storage_banner"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            GlassLiquidIconOrb(
-                size = 34.dp,
-                cornerRadius = 11.dp,
-                tintColor = NeonTeal,
-                secondaryColor = ElectricCyan
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Saved: ${receivedFile.name}",
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "Saved to Downloads/BeamDrop • Choose location:",
-                    fontSize = 10.5.sp,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(6.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .glassLiquidPill(cornerRadius = 9.dp, tintColor = ElectricCyan)
-                    .clickable { onSaveAsClick() }
-                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                    .testTag("received_banner_save_as_btn"),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SaveAlt,
-                    contentDescription = "Save As",
-                    tint = ElectricCyan,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(
-                    text = "Save As",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .glassLiquidPill(cornerRadius = 9.dp, tintColor = NeonTeal)
-                    .clickable { onChangeFolderClick() }
-                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                    .testTag("received_banner_folder_btn"),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.FolderOpen,
-                    contentDescription = "Folder",
-                    tint = NeonTeal,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(
-                    text = "Folder",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-            }
-
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Dismiss",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun BeamTopBarHost(
     viewModel: BeamDropViewModel,
     onReceiveClick: () -> Unit,
@@ -1008,8 +843,7 @@ private fun RadarTabHost(viewModel: BeamDropViewModel) {
 private fun HistoryTabHost(
     viewModel: BeamDropViewModel,
     onOpenFile: (TransferRecord) -> Unit,
-    onShareFile: (TransferRecord) -> Unit,
-    onSaveFileAs: (TransferRecord) -> Unit
+    onShareFile: (TransferRecord) -> Unit
 ) {
     val transferHistory by viewModel.transferHistory.collectAsState()
     val totalBytesTransferred by viewModel.totalBytesTransferred.collectAsState()
@@ -1021,7 +855,6 @@ private fun HistoryTabHost(
         onClearAll = { viewModel.clearAllHistory() },
         onOpenFile = onOpenFile,
         onShareFile = onShareFile,
-        onSaveFileAs = onSaveFileAs,
         onRetryTransfer = { record -> viewModel.retryHistoryRecord(record) }
     )
 }

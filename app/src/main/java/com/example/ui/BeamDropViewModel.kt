@@ -1539,6 +1539,24 @@ class BeamDropViewModel(application: Application) : AndroidViewModel(application
     fun addTextSnippet(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
+        if (trimmed.length > 500) {
+            try {
+                val timeStamp = System.currentTimeMillis()
+                val textFile = java.io.File(getApplication<Application>().cacheDir, "Pasted_Text_$timeStamp.txt")
+                textFile.writeText(trimmed, Charsets.UTF_8)
+                val uri = android.net.Uri.fromFile(textFile).toString()
+                addCustomFile(
+                    name = textFile.name,
+                    sizeBytes = textFile.length(),
+                    mimeType = "text/plain",
+                    uri = uri
+                )
+                triggerPendingTransferIfReady()
+            } catch (e: Exception) {
+                // fallback to snippet
+            }
+            return
+        }
         val previewLine = trimmed.replace("\n", " ").take(48).ifEmpty { "Plain Text" }
         val utf8Bytes = trimmed.toByteArray(Charsets.UTF_8)
         val newItem = SharableItem(

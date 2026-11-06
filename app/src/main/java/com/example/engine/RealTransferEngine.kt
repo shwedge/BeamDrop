@@ -585,13 +585,22 @@ class RealTransferEngine(private val context: Context) {
                         }
                         if (!transferAborted && textBytesRead >= fileSize) {
                             val decodedText = textBytesOut.toString(StandardCharsets.UTF_8.name())
-                            onEvent(
-                                IncomingTransferEvent.TextReceived(
-                                    senderName = senderName,
-                                    senderIp = senderIp,
-                                    textContent = decodedText
+                            if (decodedText.length <= 500) {
+                                onEvent(
+                                    IncomingTransferEvent.TextReceived(
+                                        senderName = senderName,
+                                        senderIp = senderIp,
+                                        textContent = decodedText
+                                    )
                                 )
-                            )
+                            } else {
+                                val destinationFile = getUniqueFile(downloadsDir, "Pasted_Text_${System.currentTimeMillis()}.txt")
+                                destinationFile.writeBytes(textBytesOut.toByteArray())
+                                withContext(Dispatchers.IO) {
+                                    persistReceivedFileToDeviceStorage(context, destinationFile)
+                                }
+                                savedFiles.add(destinationFile)
+                            }
                         } else {
                             transferAborted = true
                             break
@@ -809,12 +818,19 @@ class RealTransferEngine(private val context: Context) {
 
                 val isPlainText = item.mimeType.contains("beamdrop-raw", ignoreCase = true) ||
                     item.uri?.startsWith("beamtext://") == true
-                val wireTitle = if (isPlainText) "__BEAMDROP_PLAIN_TEXT__" else item.title
-                val wireMime = if (isPlainText) "text/plain;beamdrop-raw" else item.mimeType
                 val plainTextBytes = if (isPlainText) {
                     val rawText = item.uri?.removePrefix("beamtext://") ?: item.title
                     rawText.toByteArray(StandardCharsets.UTF_8)
                 } else null
+                val isSnippet = isPlainText && (plainTextBytes?.size ?: 0) <= 500
+                val wireTitle = if (isSnippet) {
+                    "__BEAMDROP_PLAIN_TEXT__"
+                } else if (isPlainText) {
+                    "Pasted_Text_${System.currentTimeMillis()}.txt"
+                } else {
+                    item.title
+                }
+                val wireMime = if (isSnippet) "text/plain;beamdrop-raw" else if (isPlainText) "text/plain" else item.mimeType
                 val wireSize = plainTextBytes?.size?.toLong() ?: item.sizeBytes
 
                 val metaHeader = "FILE|$wireTitle|$wireSize|$wireMime\n"

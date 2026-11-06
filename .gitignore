@@ -17,3 +17,9 @@ debug.keystore
 *.log
 
 inspect_screens/
+
+motion-graphics-skill*
+voiceover.mp3
+beamdrop-motion/
+BeamDrop_Motion_Showcase.html
+Run-Motion-Studio.bat

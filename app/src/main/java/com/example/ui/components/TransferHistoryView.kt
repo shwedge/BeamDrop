@@ -72,7 +72,6 @@ fun TransferHistoryView(
     onClearAll: () -> Unit,
     onOpenFile: (TransferRecord) -> Unit = {},
     onShareFile: (TransferRecord) -> Unit = {},
-    onSaveFileAs: (TransferRecord) -> Unit = {},
     onRetryTransfer: (TransferRecord) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -201,7 +200,6 @@ fun TransferHistoryView(
                         onDelete = { onDeleteRecord(record.id) },
                         onOpen = { onOpenFile(record) },
                         onShare = { onShareFile(record) },
-                        onSaveAs = { onSaveFileAs(record) },
                         onRetry = { onRetryTransfer(record) }
                     )
                 }
@@ -216,7 +214,6 @@ private fun RecentTransferItemCard(
     onDelete: () -> Unit,
     onOpen: () -> Unit,
     onShare: () -> Unit,
-    onSaveAs: () -> Unit,
     onRetry: () -> Unit
 ) {
     val cleanDeviceName = remember(record.peerDeviceName) {
@@ -349,34 +346,11 @@ private fun RecentTransferItemCard(
             }
         }
 
-        // Right Actions: Glass Liquid Save As, Share & Delete Orbs
+        // Right Actions: Glass Liquid Share & Delete Orbs
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (!isSent) {
-                GlassLiquidIconOrb(
-                    size = 34.dp,
-                    cornerRadius = 11.dp,
-                    tintColor = NeonTeal,
-                    secondaryColor = ElectricCyan
-                ) {
-                    IconButton(
-                        onClick = onSaveAs,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .testTag("save_as_history_${record.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SaveAlt,
-                            contentDescription = "Save File To Folder",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-
             GlassLiquidIconOrb(
                 size = 34.dp,
                 cornerRadius = 11.dp,
