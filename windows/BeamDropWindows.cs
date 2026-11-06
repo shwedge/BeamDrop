@@ -275,6 +275,10 @@ namespace BeamDropWindows
                 rec.Id = ExtractJsonVal(block, "id");
                 rec.FileName = ExtractJsonVal(block, "fileName");
                 rec.FilePath = ExtractJsonVal(block, "filePath");
+                if (!string.IsNullOrEmpty(rec.FilePath))
+                {
+                    rec.FilePath = System.Text.RegularExpressions.Regex.Replace(rec.FilePath, @"\\{2,}", @"\");
+                }
                 long size;
                 if (long.TryParse(ExtractJsonVal(block, "fileSize"), out size)) rec.FileSize = size;
                 rec.DeviceName = ExtractJsonVal(block, "deviceName");
@@ -295,8 +299,14 @@ namespace BeamDropWindows
 
         private static string ExtractJsonVal(string block, string key)
         {
-            var match = System.Text.RegularExpressions.Regex.Match(block, "\"" + key + "\"\\s*:\\s*\"?([^\"\\r\\n,}]+)\"?");
-            return match.Success ? match.Groups[1].Value.Trim() : "";
+            var strMatch = System.Text.RegularExpressions.Regex.Match(block, "\"" + key + "\"\\s*:\\s*\"((?:\\\\\"|[^\"])*)\"");
+            if (strMatch.Success)
+            {
+                string raw = strMatch.Groups[1].Value;
+                return raw.Replace("\\\"", "\"").Replace("\\\\", "\\").Replace("\\n", "\n").Replace("\\r", "\r").Trim();
+            }
+            var numMatch = System.Text.RegularExpressions.Regex.Match(block, "\"" + key + "\"\\s*:\\s*([^\"\\r\\n,}]+)");
+            return numMatch.Success ? numMatch.Groups[1].Value.Trim() : "";
         }
 
         private static string EscapeJson(string s)
@@ -2135,8 +2145,9 @@ namespace BeamDropWindows
             foreach (var kvp in _peers)
             {
                 var peer = kvp.Value;
-                // If peer has not broadcast a beacon or packet in the last 10 seconds, it left Wi-Fi
-                if ((now - peer.LastSeen).TotalSeconds > 10.0)
+                // Keep connected peers active for up to 3 minutes (180s) to absorb Wi-Fi radio sleep/throttling;
+                // active peer exits are immediately evicted via BEAMDROP_BYE packets
+                if ((now - peer.LastSeen).TotalSeconds > 180.0)
                 {
                     staleKeys.Add(kvp.Key);
                 }
@@ -2151,6 +2162,31 @@ namespace BeamDropWindows
                 }
                 RefreshPeersListUi();
             }
+        }
+
+        private void RemovePeerByIdOrIp(string peerId, string peerIp)
+        {
+            try
+            {
+                bool removedAny = false;
+                foreach (var kvp in _peers)
+                {
+                    if ((!string.IsNullOrEmpty(peerId) && (kvp.Value.Id == peerId || kvp.Key == peerId || kvp.Key == "udp_" + peerId || kvp.Key == "peer_" + peerId)) ||
+                        (!string.IsNullOrEmpty(peerIp) && (kvp.Value.Ip == peerIp || kvp.Key.Contains(peerIp))))
+                    {
+                        PeerNode dummy;
+                        if (_peers.TryRemove(kvp.Key, out dummy))
+                        {
+                            removedAny = true;
+                        }
+                    }
+                }
+                if (removedAny)
+                {
+                    Dispatcher.BeginInvoke(new Action(() => RefreshPeersListUi()));
+                }
+            }
+            catch { }
         }
         public MainWindow()
         {
@@ -3186,40 +3222,71 @@ namespace BeamDropWindows
                 {
                     Title = "Plain Text Received - BeamDrop",
                     Width = 460,
-                    Height = 330,
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    Owner = this,
-                    Background = new SolidColorBrush(BgDark),
-                    Foreground = new SolidColorBrush(TextPrimary),
+                    Height = 340,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                    Topmost = true,
+                    Background = new SolidColorBrush(_currentBg),
+                    Foreground = new SolidColorBrush(_currentTextPrimary),
                     ResizeMode = ResizeMode.NoResize,
-                    BorderBrush = new SolidColorBrush(MintAccent),
-                    BorderThickness = new Thickness(1.5)
+                    BorderBrush = new SolidColorBrush(_currentMintAccent),
+                    BorderThickness = new Thickness(1.5),
+                    ShowInTaskbar = true
                 };
 
-                var sp = new StackPanel { Margin = new Thickness(20) };
+                var sp = new StackPanel { Margin = new Thickness(22) };
 
-                var headerText = new TextBlock
+                var headerRow = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+                var iconBox = new Border
+                {
+                    Width = 36,
+                    Height = 36,
+                    CornerRadius = new CornerRadius(8),
+                    Background = new SolidColorBrush(Color.FromArgb(40, 58, 228, 204)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(90, 58, 228, 204)),
+                    BorderThickness = new Thickness(1),
+                    Margin = new Thickness(0, 0, 12, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                iconBox.Child = new TextBlock
+                {
+                    Text = "📋",
+                    FontSize = 18,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                DockPanel.SetDock(iconBox, Dock.Left);
+                headerRow.Children.Add(iconBox);
+
+                var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                titleStack.Children.Add(new TextBlock
                 {
                     Text = "Plain Text Received",
-                    FontSize = 16,
+                    FontSize = 17,
                     FontWeight = FontWeights.Bold,
-                    Foreground = new SolidColorBrush(MintAccent)
-                };
-                var subText = new TextBlock
+                    Foreground = new SolidColorBrush(_currentTextPrimary)
+                });
+                titleStack.Children.Add(new TextBlock
                 {
-                    Text = string.Format("From {0} • Copied to clipboard", senderName),
+                    Text = string.Format("From {0}", senderName),
                     FontSize = 12,
-                    Foreground = new SolidColorBrush(Color.FromRgb(140, 160, 180)),
-                    Margin = new Thickness(0, 4, 0, 12)
-                };
+                    Foreground = new SolidColorBrush(_currentMintAccent),
+                    Margin = new Thickness(0, 2, 0, 0)
+                });
+                headerRow.Children.Add(titleStack);
+                sp.Children.Add(headerRow);
 
-                sp.Children.Add(headerText);
-                sp.Children.Add(subText);
+                sp.Children.Add(new TextBlock
+                {
+                    Text = string.Format("Copy the plain text sent by {0}:", senderName),
+                    FontSize = 12.5,
+                    Foreground = new SolidColorBrush(_currentTextSecondary),
+                    Margin = new Thickness(0, 4, 0, 8)
+                });
 
                 var box = new TextBox
                 {
                     Text = textContent,
-                    Height = 130,
+                    Height = 120,
                     IsReadOnly = true,
                     AcceptsReturn = true,
                     TextWrapping = TextWrapping.Wrap,
@@ -3234,16 +3301,28 @@ namespace BeamDropWindows
                 sp.Children.Add(box);
 
                 var btnGrid = new Grid { Margin = new Thickness(0, 16, 0, 0) };
-                btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
                 btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+                btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                btnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+
+                var closeBtn = new Button
+                {
+                    Content = "Close",
+                    Height = 36,
+                    Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                    Foreground = new SolidColorBrush(_currentTextPrimary),
+                    Cursor = Cursors.Hand
+                };
+                closeBtn.Click += (s, e) => win.Close();
+                Grid.SetColumn(closeBtn, 0);
+                btnGrid.Children.Add(closeBtn);
 
                 var copyBtn = new Button
                 {
-                    Content = "Copy Text",
+                    Content = "📋 Copy Text",
                     Height = 36,
-                    Background = new SolidColorBrush(MintAccent),
-                    Foreground = new SolidColorBrush(BgDark),
+                    Background = new SolidColorBrush(_currentMintAccent),
+                    Foreground = new SolidColorBrush(Color.FromRgb(15, 23, 42)),
                     FontWeight = FontWeights.Bold,
                     Cursor = Cursors.Hand
                 };
@@ -3252,28 +3331,18 @@ namespace BeamDropWindows
                     try
                     {
                         Clipboard.SetText(textContent);
-                        copyBtn.Content = "Copied to Clipboard!";
+                        copyBtn.Content = "✓ Copied to Clipboard!";
                     }
                     catch { }
                 };
-                Grid.SetColumn(copyBtn, 0);
+                Grid.SetColumn(copyBtn, 2);
                 btnGrid.Children.Add(copyBtn);
-
-                var closeBtn = new Button
-                {
-                    Content = "Close",
-                    Height = 36,
-                    Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-                    Foreground = new SolidColorBrush(TextPrimary),
-                    Cursor = Cursors.Hand
-                };
-                closeBtn.Click += (s, e) => win.Close();
-                Grid.SetColumn(closeBtn, 2);
-                btnGrid.Children.Add(closeBtn);
 
                 sp.Children.Add(btnGrid);
                 win.Content = sp;
-                win.ShowDialog();
+                win.Show();
+                win.Activate();
+                win.Focus();
             }
             catch { }
         }
@@ -4603,6 +4672,16 @@ namespace BeamDropWindows
                             return;
                         }
 
+                        // 1b. BEAMDROP_BYE departure signal
+                        if (firstLine.StartsWith("BEAMDROP_BYE"))
+                        {
+                            var parts = firstLine.Split('|');
+                            string byeId = parts.Length > 1 ? parts[1] : "";
+                            string byeIp = (parts.Length > 2 && parts[2].Contains(".")) ? parts[2] : senderIp;
+                            RemovePeerByIdOrIp(byeId, byeIp);
+                            return;
+                        }
+
                         // 2. Unified Handshake Verification Ping
                         if (firstLine.StartsWith("BEAMDROP_PING|"))
                         {
@@ -4681,20 +4760,47 @@ namespace BeamDropWindows
                                     }
 
                                     string fileHdr = ReadUtf8Line(stream);
-                                    if (string.IsNullOrEmpty(fileHdr) || (!fileHdr.StartsWith("FILE|") && !fileHdr.StartsWith("TEXT|")))
+                                    if (string.IsNullOrEmpty(fileHdr))
                                     {
                                         transferAborted = true;
                                         break;
                                     }
 
                                     var fParts = fileHdr.Split('|');
-                                    string fileName = SanitizeFileName(fParts.Length > 1 ? fParts[1] : ("Received_" + i));
-                                    long fileSize = fParts.Length > 2 ? long.Parse(fParts[2]) : 0L;
-                                    string fileMime = fParts.Length > 3 ? fParts[3] : "";
+                                    string fileName = "Received_" + i;
+                                    long fileSize = 0L;
+                                    string fileMime = "";
+
+                                    if (fParts[0] == "FILE" && fParts.Length >= 3)
+                                    {
+                                        fileName = SanitizeFileName(fParts[1]);
+                                        long.TryParse(fParts[2], out fileSize);
+                                        fileMime = fParts.Length > 3 ? fParts[3] : "";
+                                    }
+                                    else if (fParts[0] == "TEXT" && fParts.Length >= 2)
+                                    {
+                                        fileName = "__BEAMDROP_PLAIN_TEXT__";
+                                        long.TryParse(fParts[1], out fileSize);
+                                        fileMime = fParts.Length > 2 ? fParts[2] : "text/plain;beamdrop-raw";
+                                    }
+                                    else if (fParts.Length >= 2)
+                                    {
+                                        fileName = SanitizeFileName(fParts[0]);
+                                        long.TryParse(fParts[1], out fileSize);
+                                        fileMime = fParts.Length > 2 ? fParts[2] : "";
+                                    }
+                                    else
+                                    {
+                                        transferAborted = true;
+                                        break;
+                                    }
 
                                     bool isPlainText = fileName == "__BEAMDROP_PLAIN_TEXT__" ||
                                         fileMime.IndexOf("beamdrop-raw", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                        fParts[0] == "TEXT";
+                                        fParts[0] == "TEXT" ||
+                                        ((fileMime.IndexOf("text/plain", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                          fileName.StartsWith("Text_", StringComparison.OrdinalIgnoreCase) ||
+                                          fileName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) && fileSize > 0 && fileSize <= 500);
 
                                     if (isPlainText)
                                     {
@@ -4719,10 +4825,10 @@ namespace BeamDropWindows
                                             string textContent = Encoding.UTF8.GetString(textBytes);
                                             if (textContent.Length <= 500)
                                             {
-                                                Dispatcher.Invoke(() =>
+                                                Dispatcher.BeginInvoke(new Action(() =>
                                                 {
                                                     ShowReceivedPlainTextWindow(senderName, textContent);
-                                                });
+                                                }));
                                                 string snippetPreview = textContent.Length > 35
                                                     ? textContent.Substring(0, 35).Replace("\r", " ").Replace("\n", " ") + "..."
                                                     : textContent.Replace("\r", " ").Replace("\n", " ");
@@ -4737,7 +4843,7 @@ namespace BeamDropWindows
                                                     SavedPath = "",
                                                     Timestamp = DateTime.Now.ToString("HH:mm:ss")
                                                 });
-                                                ReceivingHistoryManager.AddRecord("Plain Text", "", textBytes.Length, senderName, senderIp, DateTime.Now);
+                                                ReceivingHistoryManager.AddRecord("Plain Text: " + snippetPreview, textContent, textBytes.Length, senderName, senderIp, DateTime.Now);
                                                 PlayCompletionChime();
                                             }
                                             else
@@ -4897,7 +5003,14 @@ namespace BeamDropWindows
                             string senderSocketIp = res.RemoteEndPoint != null ? res.RemoteEndPoint.Address.ToString() : "";
                             string msg = Encoding.UTF8.GetString(res.Buffer).Trim();
 
-                            if (msg.StartsWith("BEAMDROP_BEACON|"))
+                            if (msg.StartsWith("BEAMDROP_BYE") || msg.StartsWith("BEAMDROP_OFFLINE") || msg.StartsWith("BEAMDROP_EXIT"))
+                            {
+                                var parts = msg.Split('|');
+                                string byeId = parts.Length > 1 ? parts[1] : "";
+                                string byeIp = (parts.Length > 2 && parts[2].Contains(".")) ? parts[2] : senderSocketIp;
+                                RemovePeerByIdOrIp(byeId, byeIp);
+                            }
+                            else if (msg.StartsWith("BEAMDROP_BEACON|"))
                             {
                                 var parts = msg.Split('|');
                                 // Unified 6-part format: BEAMDROP_BEACON|<id>|<name>|<ip>|<port>|<type>
@@ -6295,169 +6408,238 @@ namespace BeamDropWindows
 
             foreach (var r in records)
             {
-                var card = CreateHistoryItemCard(r);
-                _historyCardsStack.Children.Add(card);
+                try
+                {
+                    var card = CreateHistoryItemCard(r);
+                    if (card != null) _historyCardsStack.Children.Add(card);
+                }
+                catch { }
             }
         }
 
         private Border CreateHistoryItemCard(ReceivedFileRecord item)
         {
-            var card = new Border
+            try
             {
-                CornerRadius = new CornerRadius(12),
-                Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(170, 20, 32, 48) : Color.FromArgb(220, 255, 255, 255)),
-                BorderBrush = new SolidColorBrush(_isDarkMode ? Color.FromArgb(50, 58, 228, 204) : Color.FromArgb(80, 200, 210, 220)),
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(14, 12, 14, 12),
-                Margin = new Thickness(0, 0, 0, 10),
-                Cursor = Cursors.Hand
-            };
-
-            var dock = new DockPanel();
-
-            // 1. File Type Icon Badge
-            string ext = Path.GetExtension(item.FileName).ToLowerInvariant();
-            string iconGlyph;
-            Color iconBg1, iconBg2;
-            GetFileTypeVisuals(ext, out iconGlyph, out iconBg1, out iconBg2);
-
-            var iconBadge = new Border
-            {
-                Width = 42,
-                Height = 42,
-                CornerRadius = new CornerRadius(10),
-                Background = new LinearGradientBrush(iconBg1, iconBg2, new Point(0, 0), new Point(1, 1)),
-                Margin = new Thickness(0, 0, 12, 0),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            iconBadge.Child = new TextBlock
-            {
-                Text = iconGlyph,
-                FontSize = 11,
-                FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            DockPanel.SetDock(iconBadge, Dock.Left);
-            dock.Children.Add(iconBadge);
-
-            // 2. Center Content
-            var details = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-
-            var nameRow = new DockPanel { Margin = new Thickness(0, 0, 0, 3) };
-
-            string deviceDisplay = item.DeviceName;
-            if (deviceDisplay.Contains("HONOR") || deviceDisplay.Contains("Android") || deviceDisplay.Contains("Phone") || deviceDisplay.Contains("Galaxy"))
-                deviceDisplay = "Mobile: " + deviceDisplay;
-            else if (deviceDisplay.Contains("VICTUS") || deviceDisplay.Contains("PC") || deviceDisplay.Contains("Laptop") || deviceDisplay.Contains("Windows"))
-                deviceDisplay = "PC: " + deviceDisplay;
-            else
-                deviceDisplay = "Device: " + deviceDisplay;
-
-            var devPill = new Border
-            {
-                CornerRadius = new CornerRadius(8),
-                Background = new SolidColorBrush(Color.FromArgb(35, 58, 228, 204)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(80, 58, 228, 204)),
-                BorderThickness = new Thickness(0.8),
-                Padding = new Thickness(6, 2, 6, 2),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            devPill.Child = new TextBlock
-            {
-                Text = deviceDisplay,
-                FontSize = 10.5,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(58, 228, 204))
-            };
-            DockPanel.SetDock(devPill, Dock.Right);
-            nameRow.Children.Add(devPill);
-
-            var fileNameText = new TextBlock
-            {
-                Text = item.FileName,
-                FontSize = 13.5,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(_currentTextPrimary),
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                ToolTip = item.FilePath,
-                Margin = new Thickness(0, 0, 8, 0)
-            };
-            nameRow.Children.Add(fileNameText);
-            details.Children.Add(nameRow);
-
-            // Exact Date, Time and File Size Metadata Row
-            var metaRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 8) };
-            metaRow.Children.Add(new TextBlock
-            {
-                Text = string.Format("{0}   \u2022   {1}   \u2022   {2}", item.FormattedDate, item.FormattedExactTime, item.FormattedSize),
-                FontSize = 11,
-                Foreground = new SolidColorBrush(_currentTextSecondary)
-            });
-            details.Children.Add(metaRow);
-
-            // Actions Row: Open, Explorer, Copy Path
-            var actionsRow = new StackPanel { Orientation = Orientation.Horizontal };
-
-            var openBtn = CreateMiniActionPill("Open", Color.FromArgb(40, 58, 228, 204), Color.FromRgb(58, 228, 204), () =>
-            {
-                try
+                var card = new Border
                 {
-                    if (File.Exists(item.FilePath)) Process.Start(new ProcessStartInfo(item.FilePath) { UseShellExecute = true });
-                    else MessageBox.Show(this, "File no longer exists at:\n" + item.FilePath, "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-                catch (Exception ex) { MessageBox.Show(this, "Could not open file: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
-            });
-            actionsRow.Children.Add(openBtn);
+                    CornerRadius = new CornerRadius(12),
+                    Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(170, 20, 32, 48) : Color.FromArgb(220, 255, 255, 255)),
+                    BorderBrush = new SolidColorBrush(_isDarkMode ? Color.FromArgb(50, 58, 228, 204) : Color.FromArgb(80, 200, 210, 220)),
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(14, 12, 14, 12),
+                    Margin = new Thickness(0, 0, 0, 10),
+                    Cursor = Cursors.Hand
+                };
 
-            var revealBtn = CreateMiniActionPill("Show in Folder", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
-            {
-                try
+                var dock = new DockPanel();
+
+                bool isPlainTextItem = item.FileName.StartsWith("Plain Text", StringComparison.OrdinalIgnoreCase) ||
+                    item.FileName == "__BEAMDROP_PLAIN_TEXT__" ||
+                    (!string.IsNullOrEmpty(item.FilePath) && !File.Exists(item.FilePath) && !item.FileName.Contains("."));
+
+                string ext = "";
+                if (!isPlainTextItem)
                 {
-                    if (File.Exists(item.FilePath)) Process.Start("explorer.exe", string.Format("/select,\"{0}\"", item.FilePath));
-                    else Process.Start("explorer.exe", _downloadDir);
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(item.FileName) && item.FileName.IndexOfAny(Path.GetInvalidPathChars()) < 0)
+                        {
+                            ext = Path.GetExtension(item.FileName).ToLowerInvariant();
+                        }
+                    }
+                    catch { ext = ""; }
                 }
-                catch { }
-            });
-            actionsRow.Children.Add(revealBtn);
 
-            var copyPathBtn = CreateMiniActionPill("Copy Path", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
-            {
-                try
+                // 1. File Type Icon Badge
+                string iconGlyph;
+                Color iconBg1, iconBg2;
+                if (isPlainTextItem)
                 {
-                    Clipboard.SetText(item.FilePath);
-                    ShowCompletionToast("Copied to Clipboard!", "Full file path copied to clipboard", item.FileName, item.FileSize, item.FilePath);
+                    iconGlyph = "TXT";
+                    iconBg1 = Color.FromRgb(58, 228, 204);
+                    iconBg2 = Color.FromRgb(139, 92, 246);
                 }
-                catch { }
-            });
-            actionsRow.Children.Add(copyPathBtn);
-
-            details.Children.Add(actionsRow);
-            dock.Children.Add(details);
-            card.Child = dock;
-
-            card.MouseEnter += (s, e) =>
-            {
-                card.BorderBrush = new SolidColorBrush(Color.FromArgb(160, 58, 228, 204));
-                card.Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(210, 26, 40, 60) : Color.FromRgb(245, 250, 255));
-            };
-            card.MouseLeave += (s, e) =>
-            {
-                card.BorderBrush = new SolidColorBrush(_isDarkMode ? Color.FromArgb(50, 58, 228, 204) : Color.FromArgb(80, 200, 210, 220));
-                card.Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(170, 20, 32, 48) : Color.FromArgb(220, 255, 255, 255));
-            };
-
-            card.MouseLeftButtonUp += (s, e) =>
-            {
-                if (e.ClickCount == 2)
+                else
                 {
-                    try { if (File.Exists(item.FilePath)) Process.Start(new ProcessStartInfo(item.FilePath) { UseShellExecute = true }); } catch { }
+                    GetFileTypeVisuals(ext, out iconGlyph, out iconBg1, out iconBg2);
                 }
-            };
 
-            return card;
+                var iconBadge = new Border
+                {
+                    Width = 42,
+                    Height = 42,
+                    CornerRadius = new CornerRadius(10),
+                    Background = new LinearGradientBrush(iconBg1, iconBg2, new Point(0, 0), new Point(1, 1)),
+                    Margin = new Thickness(0, 0, 12, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                iconBadge.Child = new TextBlock
+                {
+                    Text = iconGlyph,
+                    FontSize = 11,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                DockPanel.SetDock(iconBadge, Dock.Left);
+                dock.Children.Add(iconBadge);
+
+                // 2. Center Content
+                var details = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+
+                var nameRow = new DockPanel { Margin = new Thickness(0, 0, 0, 3) };
+
+                string deviceDisplay = item.DeviceName ?? "Device";
+                if (deviceDisplay.Contains("HONOR") || deviceDisplay.Contains("Android") || deviceDisplay.Contains("Phone") || deviceDisplay.Contains("Galaxy"))
+                    deviceDisplay = "Mobile: " + deviceDisplay;
+                else if (deviceDisplay.Contains("VICTUS") || deviceDisplay.Contains("PC") || deviceDisplay.Contains("Laptop") || deviceDisplay.Contains("Windows"))
+                    deviceDisplay = "PC: " + deviceDisplay;
+                else
+                    deviceDisplay = "Device: " + deviceDisplay;
+
+                var devPill = new Border
+                {
+                    CornerRadius = new CornerRadius(8),
+                    Background = new SolidColorBrush(Color.FromArgb(35, 58, 228, 204)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(80, 58, 228, 204)),
+                    BorderThickness = new Thickness(0.8),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                devPill.Child = new TextBlock
+                {
+                    Text = deviceDisplay,
+                    FontSize = 10.5,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(58, 228, 204))
+                };
+                DockPanel.SetDock(devPill, Dock.Right);
+                nameRow.Children.Add(devPill);
+
+                string displayFileName = item.FileName == "__BEAMDROP_PLAIN_TEXT__" ? "Plain Text Snippet" : item.FileName;
+                var fileNameText = new TextBlock
+                {
+                    Text = displayFileName,
+                    FontSize = 13.5,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(_currentTextPrimary),
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    ToolTip = item.FilePath,
+                    Margin = new Thickness(0, 0, 8, 0)
+                };
+                nameRow.Children.Add(fileNameText);
+                details.Children.Add(nameRow);
+
+                // Exact Date, Time and File Size Metadata Row
+                var metaRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 8) };
+                string sizeOrType = isPlainTextItem ? string.Format("{0} bytes", item.FileSize) : item.FormattedSize;
+                metaRow.Children.Add(new TextBlock
+                {
+                    Text = string.Format("{0}   \u2022   {1}   \u2022   {2}", item.FormattedDate, item.FormattedExactTime, sizeOrType),
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(_currentTextSecondary)
+                });
+                details.Children.Add(metaRow);
+
+                // Actions Row
+                var actionsRow = new StackPanel { Orientation = Orientation.Horizontal };
+
+                if (isPlainTextItem)
+                {
+                    string plainContent = !string.IsNullOrEmpty(item.FilePath) ? item.FilePath : item.FileName.Replace("Plain Text: ", "");
+                    var copyTextBtn = CreateMiniActionPill("📋 Copy Text", Color.FromArgb(40, 58, 228, 204), Color.FromRgb(58, 228, 204), () =>
+                    {
+                        try
+                        {
+                            Clipboard.SetText(plainContent);
+                            ShowCompletionToast("Copied to Clipboard!", "Plain text copied to clipboard", plainContent.Length > 30 ? plainContent.Substring(0, 30) + "..." : plainContent, plainContent.Length, null);
+                        }
+                        catch { }
+                    });
+                    actionsRow.Children.Add(copyTextBtn);
+
+                    var viewTextBtn = CreateMiniActionPill("👁 View Text", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
+                    {
+                        ShowReceivedPlainTextWindow(item.DeviceName, plainContent);
+                    });
+                    actionsRow.Children.Add(viewTextBtn);
+                }
+                else
+                {
+                    var openBtn = CreateMiniActionPill("Open", Color.FromArgb(40, 58, 228, 204), Color.FromRgb(58, 228, 204), () =>
+                    {
+                        try
+                        {
+                            if (File.Exists(item.FilePath)) Process.Start(new ProcessStartInfo(item.FilePath) { UseShellExecute = true });
+                            else MessageBox.Show(this, "File no longer exists at:\n" + item.FilePath, "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                        catch (Exception ex) { MessageBox.Show(this, "Could not open file: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
+                    });
+                    actionsRow.Children.Add(openBtn);
+
+                    var revealBtn = CreateMiniActionPill("Show in Folder", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
+                    {
+                        try
+                        {
+                            if (File.Exists(item.FilePath)) Process.Start("explorer.exe", string.Format("/select,\"{0}\"", item.FilePath));
+                            else Process.Start("explorer.exe", _downloadDir);
+                        }
+                        catch { }
+                    });
+                    actionsRow.Children.Add(revealBtn);
+
+                    var copyPathBtn = CreateMiniActionPill("Copy Path", Color.FromArgb(30, 255, 255, 255), _currentTextSecondary, () =>
+                    {
+                        try
+                        {
+                            Clipboard.SetText(item.FilePath);
+                            ShowCompletionToast("Copied to Clipboard!", "Full file path copied to clipboard", item.FileName, item.FileSize, item.FilePath);
+                        }
+                        catch { }
+                    });
+                    actionsRow.Children.Add(copyPathBtn);
+                }
+
+                details.Children.Add(actionsRow);
+                dock.Children.Add(details);
+                card.Child = dock;
+
+                card.MouseEnter += (s, e) =>
+                {
+                    card.BorderBrush = new SolidColorBrush(Color.FromArgb(160, 58, 228, 204));
+                    card.Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(210, 26, 40, 60) : Color.FromRgb(245, 250, 255));
+                };
+                card.MouseLeave += (s, e) =>
+                {
+                    card.BorderBrush = new SolidColorBrush(_isDarkMode ? Color.FromArgb(50, 58, 228, 204) : Color.FromArgb(80, 200, 210, 220));
+                    card.Background = new SolidColorBrush(_isDarkMode ? Color.FromArgb(170, 20, 32, 48) : Color.FromArgb(220, 255, 255, 255));
+                };
+
+                card.MouseLeftButtonUp += (s, e) =>
+                {
+                    if (e.ClickCount == 2)
+                    {
+                        if (isPlainTextItem)
+                        {
+                            string plainContent = !string.IsNullOrEmpty(item.FilePath) ? item.FilePath : item.FileName.Replace("Plain Text: ", "");
+                            ShowReceivedPlainTextWindow(item.DeviceName, plainContent);
+                        }
+                        else
+                        {
+                            try { if (File.Exists(item.FilePath)) Process.Start(new ProcessStartInfo(item.FilePath) { UseShellExecute = true }); } catch { }
+                        }
+                    }
+                };
+
+                return card;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static Border CreateMiniActionPill(string label, Color bg, Color fg, Action onClick)
